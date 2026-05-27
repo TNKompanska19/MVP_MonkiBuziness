@@ -143,11 +143,25 @@
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
   .chip{font-size:12px;padding:5px 11px;border:1px solid var(--line);border-radius:20px;color:var(--muted);cursor:pointer;background:#fff;transition:all .12s}
   .chip:hover{background:#f5f5f5;color:var(--text);border-color:#ccc}
+  /* Attached-image preview chip — sits above the textarea once user picks an image. */
+  .attach-preview{display:none;align-items:center;gap:10px;padding:8px 10px;margin-bottom:8px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;font-size:12px;color:var(--accent-tx)}
+  .attach-preview.visible{display:flex}
+  .attach-preview img{width:42px;height:42px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid #fff}
+  .attach-preview .text{flex:1;line-height:1.35}
+  .attach-preview .title{font-weight:600}
+  .attach-preview .sub{font-size:11px;color:var(--muted);margin-top:1px}
+  .attach-preview .clear{background:none;border:none;color:var(--accent-tx);cursor:pointer;font-size:18px;line-height:1;padding:0 4px}
+  .attach-preview .clear:hover{color:#A4302A}
   .input-row{display:flex;gap:8px;align-items:flex-end}
+  .attach-btn{width:42px;height:42px;border:1px solid var(--line2);border-radius:10px;background:#fff;color:var(--muted);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;padding:0}
+  .attach-btn:hover{background:#f5f5f5;color:var(--text)}
+  .attach-btn.active{border-color:var(--accent);color:var(--accent-tx);background:var(--accent-bg)}
   .input-row textarea{flex:1;border:1px solid var(--line2);border-radius:10px;padding:11px 14px;font-size:14px;font-family:inherit;resize:none;outline:none;background:#fff;color:var(--text);max-height:120px;line-height:1.4}
   .input-row textarea:focus{border-color:#aaa}
   .send-btn{width:42px;height:42px;border:none;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s}
   .send-btn:hover{opacity:.88}
+  /* Attached image inside a chat bubble (so the user sees what they sent). */
+  .msg-img-attached{margin-top:8px;max-width:220px;max-height:220px;border-radius:10px;border:1px solid var(--line);display:block;object-fit:cover}
 
   /* ===== FLOATING COMPARE BAR (appears when 2+ products selected) ===== */
   .compare-bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--text);color:#fff;padding:11px 18px;border-radius:24px;font-size:13px;display:flex;align-items:center;gap:14px;box-shadow:0 6px 20px rgba(0,0,0,.18);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
@@ -258,8 +272,19 @@
         <span class="chip" onclick="quick('off-white linen curtains 140x260cm, max €60 per pair')">🪟 curtains</span>
         <span class="chip" onclick="quick('matte ceramic plant pot, around 20cm, under €25')">🪴 plant pot</span>
       </div>
+      <!-- Attached-image preview (appears once the user picks a file) -->
+      <div class="attach-preview" id="attachPreview">
+        <img id="attachImg" alt="reference"/>
+        <div class="text">
+          <div class="title">📷 Reference image attached</div>
+          <div class="sub">AI will match results to this aesthetic</div>
+        </div>
+        <button class="clear" onclick="clearAttachedImage()" title="Remove">×</button>
+      </div>
       <div class="input-row">
-        <textarea id="input" rows="1" placeholder="Describe what you're looking for, or just say hi..." onkeydown="onKey(event)" oninput="autoGrow(this)"></textarea>
+        <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="onFilePicked(event)"/>
+        <button class="attach-btn" id="attachBtn" onclick="document.getElementById('fileInput').click()" title="Attach reference image">📎</button>
+        <textarea id="input" rows="1" placeholder="Describe what you're looking for, or attach a reference photo..." onkeydown="onKey(event)" oninput="autoGrow(this)"></textarea>
         <button class="send-btn" onclick="sendMessage()">↑</button>
       </div>
     </div>
@@ -319,12 +344,13 @@ const STORAGE_KEY = 'monki_state_v4';
 const USER_NAME   = 'Kaysiia T.';
 const USER_AVATAR = '/pfp.png';
 
-let chats        = [];
-let activeChat   = null;
-let basketMap    = {};
-let resultsCache = {};
-let comparing    = new Set();
-let shipTo       = 'NL';   // ISO-2 country code, persisted in localStorage
+let chats          = [];
+let activeChat     = null;
+let basketMap      = {};
+let resultsCache   = {};
+let comparing      = new Set();
+let shipTo         = 'NL';   // ISO-2 country code, persisted in localStorage
+let attachedImage  = null;   // { dataUrl, mime } when user picks an image. Cleared after send.
 
 /* ---------- localStorage persistence ---------- */
 function saveState(){
@@ -356,6 +382,70 @@ function onShipToChange(value){
   saveState();
   // No re-search — the user will trigger a new one. Delivery costs on existing
   // results stay as they were (they reflect the country in force at search time).
+}
+
+/* ---------- Attached reference image ---------- */
+/**
+ * Downscale an image client-side before sending it to the server. Reasons:
+ *   - vision API charges per token, and image tokens scale with resolution
+ *   - base64 payloads of 5+ MB phone photos hurt request latency
+ *   - the model doesn't gain useful detail above ~1024px for aesthetic
+ *     matching of an interior scene
+ *
+ * Uses the browser canvas — no external libs needed.
+ *
+ * @return Promise<{ dataUrl: string, mime: string }>
+ */
+function downscaleImage(file, maxDim = 1024) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width  * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        // JPEG @ 85% is a good size/quality balance for photos.
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        resolve({ dataUrl, mime: 'image/jpeg' });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onFilePicked(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){
+    alert('Please pick an image file.');
+    return;
+  }
+  try{
+    attachedImage = await downscaleImage(file);
+    const preview = document.getElementById('attachPreview');
+    document.getElementById('attachImg').src = attachedImage.dataUrl;
+    preview.classList.add('visible');
+    document.getElementById('attachBtn').classList.add('active');
+  }catch(e){
+    console.error('downscale failed', e);
+    alert('Could not read that image. Try another one.');
+  }
+  // Clear the input value so the same file can be re-picked after clearing.
+  event.target.value = '';
+}
+
+function clearAttachedImage(){
+  attachedImage = null;
+  document.getElementById('attachPreview').classList.remove('visible');
+  document.getElementById('attachBtn').classList.remove('active');
+  document.getElementById('attachImg').src = '';
 }
 
 function uid(){ return 'c' + Date.now() + Math.floor(Math.random()*1000); }
@@ -406,16 +496,21 @@ function autoGrow(el){ el.style.height='auto'; el.style.height=Math.min(el.scrol
 function sendMessage(){
   const input = document.getElementById('input');
   const text  = input.value.trim();
-  if(!text) return;
+  // Accept either text-only or image-only (or both). With image-only, the
+  // backend defaults to "find something that matches this image".
+  if(!text && !attachedImage) return;
   if(!activeChat) newChat();
 
   const c = chats.find(x => x.id === activeChat);
   if(c.messages.length === 0){
-    c.title = text.length > 34 ? text.slice(0,34)+'…' : text;
+    c.title = text ? (text.length > 34 ? text.slice(0,34)+'…' : text) : '📷 Reference search';
     document.getElementById('chatTitle').textContent = c.title;
     renderHistory();
   }
-  c.messages.push({role:'user', text});
+  // Stash the image (if any) on the user message so the bubble can show it.
+  const userMsg = {role:'user', text};
+  if(attachedImage) userMsg.imageDataUrl = attachedImage.dataUrl;
+  c.messages.push(userMsg);
   input.value = ''; input.style.height = 'auto';
   document.getElementById('chips').style.display = 'none';
   renderThread();
@@ -427,18 +522,26 @@ function sendMessage(){
     .filter(m => !m.typing)
     .map(m => ({role: m.role==='user'?'user':'assistant', content: m.text || ''}));
 
+  const body = {message: text, history: historyMsgs, ship_to: shipTo};
+  if(attachedImage){
+    body.image_data_url = attachedImage.dataUrl;
+  }
+
   fetch('/chat', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({message: text, history: historyMsgs, ship_to: shipTo})
+    body: JSON.stringify(body)
   }).then(r => r.json()).then(data => {
     const ai = c.messages[c.messages.length-1];
     ai.typing = false;
     ai.text   = data.intro;
     if(data.type === 'results' && data.results){
       ai.results = data.results;
+      ai.scene   = data.scene;   // for context, surfaced in card labels
       data.results.forEach(p => resultsCache[p.id] = p);
     }
+    // Reset the attach state — image was consumed by this message.
+    clearAttachedImage();
     renderThread();
     saveState();
   }).catch(err => {
@@ -461,7 +564,11 @@ function renderThread(){
   if(!c){ inner.innerHTML = ''; return; }
   inner.innerHTML = c.messages.map(m => {
     if(m.role === 'user'){
-      return `<div class="msg">${userAvatarHTML()}<div class="msg-body"><div class="msg-role">${escapeHtml(USER_NAME)}</div><div class="msg-text">${escapeHtml(m.text)}</div></div></div>`;
+      const imgHtml = m.imageDataUrl
+        ? `<img class="msg-img-attached" src="${escapeAttr(m.imageDataUrl)}" alt="reference"/>`
+        : '';
+      const textHtml = m.text ? `<div class="msg-text">${escapeHtml(m.text)}</div>` : '';
+      return `<div class="msg">${userAvatarHTML()}<div class="msg-body"><div class="msg-role">${escapeHtml(USER_NAME)}</div>${textHtml}${imgHtml}</div></div>`;
     }
     const body = m.typing
       ? `<div class="typing"><span></span><span></span><span></span></div>`
@@ -517,8 +624,8 @@ function renderCards(results){
             <div class="card-price-main">€${p.price.toFixed(2)}</div>
             <div class="card-price-sub">${deliveryHtml}</div>
           </div>
-          <div class="card-fit">
-            fit
+          <div class="card-fit" title="${p.aesthetic_scored ? 'Scored by comparing this product photo to your reference photo.' : 'Scored on how well the title matches your stated criteria.'}">
+            ${p.aesthetic_scored ? '✨ aesthetic' : 'fit'}
             <div class="card-fit-bar"><div class="card-fit-fill" style="width:${fitPct}%"></div></div>
             ${fitPct}%
           </div>
