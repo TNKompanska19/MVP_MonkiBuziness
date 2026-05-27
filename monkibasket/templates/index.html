@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MonkiBasket - AI Shopping Assistant</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#f7f7f5; --panel:#fff; --line:#ececec; --line2:#e0e0e0;
+    --text:#1a1a1a; --muted:#888; --faint:#aaa; --accent:#1D9E75; --accent-bg:#E1F5EE; --accent-tx:#0F6E56;
+  }
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
+
+  /* ===== LEFT SIDEBAR ===== */
+  .sidebar{width:240px;background:#f0efea;border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
+  .sidebar-head{padding:16px 14px;border-bottom:1px solid var(--line)}
+  .brand{font-size:16px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .brand-sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .new-chat{margin:12px 14px;height:38px;border:1px solid var(--line2);border-radius:9px;background:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text);transition:background .15s}
+  .new-chat:hover{background:#fafafa}
+  .history-label{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;padding:8px 16px 4px}
+  .history{flex:1;overflow-y:auto;padding:0 8px}
+  .history-item{padding:9px 10px;border-radius:8px;font-size:13px;color:#555;cursor:pointer;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .12s}
+  .history-item:hover{background:#e6e5df}
+  .history-item.active{background:#dedcd3;color:var(--text);font-weight:500}
+  .sidebar-foot{padding:12px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--faint)}
+
+  /* ===== CENTER CHAT ===== */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{height:52px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;background:var(--panel);gap:10px}
+  .topbar .title{font-size:14px;font-weight:500}
+  .topbar .pill{font-size:11px;color:var(--accent-tx);background:var(--accent-bg);padding:2px 9px;border-radius:20px}
+  .thread{flex:1;overflow-y:auto;padding:24px 0}
+  .thread-inner{max-width:720px;margin:0 auto;padding:0 20px}
+
+  .msg{margin-bottom:22px;display:flex;gap:12px}
+  .avatar{width:30px;height:30px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
+  .avatar.user{background:#dedcd3;color:#555}
+  .avatar.ai{background:var(--accent-bg);color:var(--accent-tx)}
+  .msg-body{flex:1;min-width:0;padding-top:3px}
+  .msg-role{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+  .msg-text{font-size:14px;line-height:1.6;color:var(--text)}
+
+  .typing{display:inline-flex;gap:3px;padding:4px 0}
+  .typing span{width:6px;height:6px;border-radius:50%;background:var(--faint);animation:blink 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+
+  /* product cards */
+  .cards{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;gap:13px;transition:border-color .15s}
+  .card:hover{border-color:#ccc}
+  .card.best{border:1.5px solid var(--accent)}
+  .card-img{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#f5f5f5;flex-shrink:0}
+  .card-body{flex:1;min-width:0}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:3px}
+  .card-name{font-size:14px;font-weight:500}
+  .card-name a{color:var(--text);text-decoration:none}
+  .card-name a:hover{color:var(--accent-tx);text-decoration:underline}
+  .badge{font-size:11px;padding:2px 9px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+  .badge-best{background:var(--accent-bg);color:var(--accent-tx)}
+  .badge-store{background:#f5f5f5;color:var(--muted)}
+  .card-meta{font-size:12px;color:var(--faint);margin-bottom:6px}
+  .card-pricing{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .price-main{font-size:16px;font-weight:500}
+  .price-del{font-size:12px;color:var(--faint)}
+  .card-details{display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:var(--faint);margin-bottom:8px}
+  .score-row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .score-label{font-size:11px;color:var(--faint);min-width:54px}
+  .score-track{flex:1;height:3px;background:#f0f0f0;border-radius:2px}
+  .score-fill{height:3px;border-radius:2px;background:var(--accent)}
+  .score-num{font-size:11px;color:var(--faint);min-width:30px;text-align:right}
+  .card-actions{display:flex;gap:6px}
+  .btn{font-size:12px;padding:5px 12px;border:1px solid var(--line2);border-radius:7px;background:#fff;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+  .btn-add{color:var(--text)} .btn-add:hover{background:#f5f5f5}
+  .btn-add.added{border-color:var(--accent);color:var(--accent-tx);background:var(--accent-bg)}
+  .btn-view{color:var(--muted)} .btn-view:hover{background:#f5f5f5}
+
+  /* composer */
+  .composer{border-top:1px solid var(--line);background:var(--panel);padding:14px 20px}
+  .composer-inner{max-width:720px;margin:0 auto}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .chip{font-size:12px;padding:5px 11px;border:1px solid var(--line);border-radius:20px;color:var(--muted);cursor:pointer;background:#fff;transition:all .12s}
+  .chip:hover{background:#f5f5f5;color:var(--text);border-color:#ccc}
+  .input-row{display:flex;gap:8px;align-items:flex-end}
+  .input-row textarea{flex:1;border:1px solid var(--line2);border-radius:10px;padding:11px 14px;font-size:14px;font-family:inherit;resize:none;outline:none;background:#fff;color:var(--text);max-height:120px;line-height:1.4}
+  .input-row textarea:focus{border-color:#aaa}
+  .send-btn{width:42px;height:42px;border:none;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s}
+  .send-btn:hover{opacity:.88}
+
+  /* ===== RIGHT BASKET (wider) ===== */
+  .basket{width:380px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
+  .basket-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .basket-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .basket-count{font-size:11px;color:#fff;background:var(--accent);border-radius:20px;padding:1px 8px;min-width:20px;text-align:center}
+  .basket-body{flex:1;overflow-y:auto;padding:16px 20px}
+  .basket-empty{text-align:center;color:var(--faint);font-size:13px;padding:50px 16px;line-height:1.6}
+  .basket-empty .big{font-size:34px;display:block;margin-bottom:12px;opacity:.5}
+  .store-group{margin-bottom:18px}
+  .store-group-head{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:9px;display:flex;justify-content:space-between;padding-bottom:5px;border-bottom:1px solid var(--line)}
+  .bitem{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid #f3f3f3;align-items:center}
+  .bitem:last-child{border-bottom:none}
+  .bitem-img{width:46px;height:46px;border-radius:7px;object-fit:cover;background:#f5f5f5;flex-shrink:0}
+  .bitem-info{flex:1;min-width:0}
+  .bitem-name{font-size:13px;line-height:1.35;color:var(--text)}
+  .bitem-sub{font-size:11px;color:var(--faint);margin-top:1px}
+  .bitem-price{font-size:13px;font-weight:500;margin-top:3px}
+  .bitem-remove{background:none;border:none;color:#ccc;cursor:pointer;font-size:17px;line-height:1;flex-shrink:0;padding:4px}
+  .bitem-remove:hover{color:var(--muted)}
+  .basket-foot{border-top:1px solid var(--line);padding:16px 20px}
+  .sumline{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .sumline.total{font-size:16px;font-weight:600;color:var(--text);margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
+  .checkout{margin-top:14px;width:100%;height:44px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .15s}
+  .checkout:hover{opacity:.88}
+  .savings{font-size:12px;color:var(--accent-tx);text-align:center;margin-top:10px;line-height:1.4}
+
+  @media(max-width:1200px){.basket{width:320px}}
+  @media(max-width:980px){.sidebar{display:none}}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-head">
+    <div class="brand">🐵 MonkiBasket</div>
+    <div class="brand-sub">by MonkiBuziness 22 BV</div>
+  </div>
+  <button class="new-chat" onclick="newChat()">＋ New search</button>
+  <div class="history-label">Recent</div>
+  <div class="history" id="history"></div>
+  <div class="sidebar-foot">Free plan · €4.99/mo Pro</div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <span class="title" id="chatTitle">New search</span>
+    <span class="pill">AI shopping assistant</span>
+  </div>
+  <div class="thread" id="thread"><div class="thread-inner" id="threadInner"></div></div>
+  <div class="composer">
+    <div class="composer-inner">
+      <div class="chips" id="chips">
+        <span class="chip" onclick="quick('I need a slim white bathroom cabinet, about 40cm wide, max €80, wooden finish')">🛁 bathroom cabinet</span>
+        <span class="chip" onclick="quick('ergonomic desk lamp with warm light, modern look, under €45')">💡 desk lamp</span>
+        <span class="chip" onclick="quick('off-white linen curtains 140x260cm, max €60 per pair')">🪟 curtains</span>
+        <span class="chip" onclick="quick('matte ceramic plant pot, around 20cm, under €25')">🪴 plant pot</span>
+      </div>
+      <div class="input-row">
+        <textarea id="input" rows="1" placeholder="Describe what you're looking for, or just say hi..." onkeydown="onKey(event)" oninput="autoGrow(this)"></textarea>
+        <button class="send-btn" onclick="sendMessage()">↑</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<aside class="basket">
+  <div class="basket-head">
+    <div class="basket-title">🛒 Your basket <span class="basket-count" id="basketCount">0</span></div>
+  </div>
+  <div class="basket-body" id="basketBody">
+    <div class="basket-empty"><span class="big">🛒</span>Your basket is empty.<br>Search for products and add them here from any store.</div>
+  </div>
+  <div class="basket-foot" id="basketFoot" style="display:none">
+    <div class="sumline"><span>Subtotal</span><span id="subtotal">€0.00</span></div>
+    <div class="sumline"><span id="delLabel">Delivery</span><span id="delTotal">€0.00</span></div>
+    <div class="sumline total"><span>Total</span><span id="grandTotal">€0.00</span></div>
+    <button class="checkout">Batch checkout — 1 click →</button>
+    <div class="savings" id="savings"></div>
+  </div>
+</aside>
+
+<script>
+let chats = [], activeChat = null, basket = [], resultsCache = {};
+function uid(){ return 'c'+Date.now()+Math.floor(Math.random()*1000); }
+
+function newChat(){
+  const c={id:uid(),title:'New search',messages:[]};
+  chats.unshift(c); activeChat=c.id;
+  renderHistory(); renderThread();
+  document.getElementById('chatTitle').textContent='New search';
+  document.getElementById('chips').style.display='flex';
+}
+function renderHistory(){
+  document.getElementById('history').innerHTML = chats.map(c=>
+    `<div class="history-item ${c.id===activeChat?'active':''}" onclick="openChat('${c.id}')">${escapeHtml(c.title)}</div>`).join('');
+}
+function openChat(id){
+  activeChat=id; renderHistory(); renderThread();
+  const c=chats.find(x=>x.id===id);
+  document.getElementById('chatTitle').textContent=c.title;
+  document.getElementById('chips').style.display=c.messages.length?'none':'flex';
+}
+function quick(t){ document.getElementById('input').value=t; sendMessage(); }
+function onKey(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+function autoGrow(el){ el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,120)+'px'; }
+
+function sendMessage(){
+  const input=document.getElementById('input'); const text=input.value.trim();
+  if(!text) return;
+  if(!activeChat) newChat();
+  const c=chats.find(x=>x.id===activeChat);
+  if(c.messages.length===0){
+    c.title=text.length>34?text.slice(0,34)+'…':text;
+    document.getElementById('chatTitle').textContent=c.title; renderHistory();
+  }
+  c.messages.push({role:'user',text});
+  input.value=''; input.style.height='auto';
+  document.getElementById('chips').style.display='none';
+  renderThread();
+  c.messages.push({role:'ai',typing:true}); renderThread();
+ const historyMsgs = c.messages.slice(0,-1).filter(m=>!m.typing).map(m=>({
+    role: m.role==='user'?'user':'assistant',
+    content: m.text || ''
+}));
+fetch('/chat', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message: text, history: historyMsgs})
+}).then(r=>r.json()).then(data=>{
+    const ai=c.messages[c.messages.length-1];
+    ai.typing=false; ai.text=data.intro;
+    if(data.type==='results' && data.results){
+      ai.results=data.results;
+      data.results.forEach(p=>resultsCache[p.id]=p);
+    }
+    renderThread();
+  });
+}
+
+function renderThread(){
+  const inner=document.getElementById('threadInner');
+  const c=chats.find(x=>x.id===activeChat);
+  if(!c){inner.innerHTML='';return;}
+  inner.innerHTML=c.messages.map(m=>{
+    if(m.role==='user')
+      return `<div class="msg"><div class="avatar user">You</div><div class="msg-body"><div class="msg-role">You</div><div class="msg-text">${escapeHtml(m.text)}</div></div></div>`;
+    let body = m.typing ? `<div class="typing"><span></span><span></span><span></span></div>`
+                        : `<div class="msg-text">${escapeHtml(m.text)}</div>` + (m.results?renderCards(m.results):'');
+    return `<div class="msg"><div class="avatar ai">M</div><div class="msg-body"><div class="msg-role">MonkiBasket</div>${body}</div></div>`;
+  }).join('');
+  document.getElementById('thread').scrollTop=99999;
+}
+
+function renderCards(results){
+  let html='<div class="cards">';
+  results.forEach((p,i)=>{
+    const best=i===0, inB=basket.some(b=>b.id===p.id);
+    html+=`<div class="card ${best?'best':''}">
+      <img class="card-img" src="${p.img}" alt="${p.name}" loading="lazy" onerror="this.style.background='#eee'"/>
+      <div class="card-body">
+        <div class="card-top">
+          <div class="card-name"><a href="${p.url}" target="_blank" rel="noopener">${p.name} ↗</a></div>
+          <span class="badge ${best?'badge-best':'badge-store'}">${best?'✓ best match':p.store}</span>
+        </div>
+        <div class="card-meta">${p.store} · ${p.material} · ${p.dims}</div>
+        <div class="card-pricing"><span class="price-main">€${p.price.toFixed(2)}</span>
+          <span class="price-del">+ €${p.delivery.toFixed(2)} delivery = <strong>€${p.total.toFixed(2)}</strong></span></div>
+        <div class="card-details"><span>⭐ ${p.rating}</span>
+          <span>${p.delivery===0?'✓ free delivery':'€'+p.delivery.toFixed(2)+' delivery'}</span><span>${p.note}</span></div>
+        <div class="score-row"><span class="score-label">fit score</span>
+          <div class="score-track"><div class="score-fill" style="width:${p.match}%"></div></div>
+          <span class="score-num">${p.match}%</span></div>
+        <div class="card-actions">
+          <button class="btn btn-add ${inB?'added':''}" id="btn-${p.id}" onclick="toggleBasket('${p.id}')">${inB?'✓ in basket':'+ add to basket'}</button>
+          <a class="btn btn-view" href="${p.url}" target="_blank" rel="noopener">↗ view on ${p.store}</a>
+        </div>
+      </div></div>`;
+  });
+  return html+'</div>';
+}
+
+function toggleBasket(id){
+  const p=resultsCache[id]; if(!p) return;
+  const i=basket.findIndex(b=>b.id===id);
+  if(i>-1) basket.splice(i,1); else basket.push(p);
+  const btn=document.getElementById('btn-'+id);
+  if(btn){const inB=basket.some(b=>b.id===id);btn.className='btn btn-add'+(inB?' added':'');btn.textContent=inB?'✓ in basket':'+ add to basket';}
+  renderBasket();
+}
+function removeFromBasket(id){
+  basket=basket.filter(b=>b.id!==id);
+  const btn=document.getElementById('btn-'+id);
+  if(btn){btn.className='btn btn-add';btn.textContent='+ add to basket';}
+  renderBasket();
+}
+
+function renderBasket(){
+  document.getElementById('basketCount').textContent=basket.length;
+  const body=document.getElementById('basketBody'), foot=document.getElementById('basketFoot');
+  if(basket.length===0){
+    body.innerHTML='<div class="basket-empty"><span class="big">🛒</span>Your basket is empty.<br>Search for products and add them here from any store.</div>';
+    foot.style.display='none'; return;
+  }
+  const groups={}; basket.forEach(p=>{(groups[p.store]=groups[p.store]||[]).push(p);});
+  let html='';
+  Object.entries(groups).forEach(([store,items])=>{
+    html+=`<div class="store-group"><div class="store-group-head"><span>${store}</span><span>${items.length} item${items.length>1?'s':''}</span></div>`;
+    items.forEach(p=>{
+      html+=`<div class="bitem"><img class="bitem-img" src="${p.img}" alt="" onerror="this.style.background='#eee'"/>
+        <div class="bitem-info"><div class="bitem-name">${p.name}</div><div class="bitem-sub">${p.material} · ${p.dims}</div><div class="bitem-price">€${p.price.toFixed(2)}</div></div>
+        <button class="bitem-remove" onclick="removeFromBasket('${p.id}')">×</button></div>`;
+    });
+    html+='</div>';
+  });
+  body.innerHTML=html;
+  let subtotal=0,delivery=0;
+  Object.values(groups).forEach(items=>{items.forEach(p=>subtotal+=p.price);delivery+=Math.min(...items.map(p=>p.delivery));});
+  const sc=Object.keys(groups).length;
+  document.getElementById('subtotal').textContent='€'+subtotal.toFixed(2);
+  document.getElementById('delLabel').textContent='Delivery ('+sc+' store'+(sc>1?'s':'')+')';
+  document.getElementById('delTotal').textContent='€'+delivery.toFixed(2);
+  document.getElementById('grandTotal').textContent='€'+(subtotal+delivery).toFixed(2);
+  document.getElementById('savings').textContent=sc>1?'✓ '+basket.length+' items from '+sc+' stores — checked out in one click':'';
+  foot.style.display='block';
+}
+
+function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+newChat(); renderBasket();
+</script>
+</body>
+</html>
