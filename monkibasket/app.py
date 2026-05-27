@@ -59,7 +59,16 @@ SERPAPI_KEY  = os.environ.get("SERPAPI_KEY",  "")
 SYSTEM_PROMPT = """You are MonkiBasket, a friendly AI shopping assistant. You help users find products across many online stores (IKEA, Bol.com, CoolBlue, Amazon, Etsy, Wehkamp, etc.).
 
 When the user describes a product they want to buy, respond in this exact JSON format:
-{"type": "search", "query": "the best English search query to find this product on Google Shopping", "reply": "a short friendly message 1-2 sentences saying what you are going to search for"}
+{"type": "search", "query": "the best English search query to find this product on Google Shopping", "reply": "a short friendly message 1-2 sentences saying what you are going to search for", "price_max": <number or null>, "price_min": <number or null>}
+
+Extract `price_max` and `price_min` (numbers in EUR) ONLY when the user explicitly states a budget:
+ - "under €3"           → price_max: 3,    price_min: null
+ - "below 50 euros"     → price_max: 50,   price_min: null
+ - "max €25"            → price_max: 25,   price_min: null
+ - "between 10 and 30"  → price_max: 30,   price_min: 10
+ - "around €20"         → price_max: 25,   price_min: 15   (give ±25% range)
+ - "cheap" / "budget"   → price_max: null  (vague, do not invent)
+If the user does not state a budget, set both to null. Do NOT guess.
 
 When the user is just chatting (greeting, question, thanks, off-topic), respond in this exact JSON format:
 {"type": "chat", "reply": "your friendly conversational reply"}
@@ -69,65 +78,107 @@ Be warm, helpful and concise. Never make up products or prices."""
 
 
 # ---------------------------------------------------------------------------
-# Per-store delivery estimates (Netherlands, EUR).
+# Per-store delivery info — keyed by lowercase store name.
 #
-# SerpAPI's Google Shopping engine does NOT reliably return shipping info in
-# its `shopping_results` payload (the `delivery` field is absent for most
-# items). The previous implementation either hardcoded delivery = 0.0 or
-# regex-parsed an empty string — both produced "✓ free delivery" on every
-# product, which is misleading and undermines the cross-store comparison
-# that is core to MonkiBasket's value prop.
+# Each entry has:
+#   country: ISO-2 of the store's primary fulfilment country
+#   base:    standard-delivery cost in EUR when shipping within that country
 #
-# Strategy: try the regex first (in case SerpAPI ever does return a string),
-# fall back to a per-store baseline estimate. Surface "est." in the UI so
-# the user knows it's a baseline.
+# SerpAPI's Google Shopping payload does not include shipping data reliably,
+# so we estimate. When the user's ship-to country differs from the store's
+# home country we add a cross-border surcharge (different for EU vs non-EU
+# — see estimate_delivery_for below). UI surfaces all of this as "est."
 # ---------------------------------------------------------------------------
-STORE_DELIVERY = {
-    "ikea":         5.95,
-    "bol.com":      1.99,
-    "bol":          1.99,
-    "coolblue":     0.00,
-    "amazon.nl":    1.99,
-    "amazon":       1.99,
-    "amazon.de":    9.99,
-    "wehkamp":      1.95,
-    "etsy":         4.50,
-    "westwing":     4.95,
-    "westwing.nl":  4.95,
-    "h&m home":     3.95,
-    "hm home":      3.95,
-    "argos":       15.00,
-    "fonq":         4.95,
-    "marktplaats":  0.00,
-    "intratuin":    5.95,
-    "123planten":   5.95,
-    "plantenbron":  5.95,
-    "superdecor":   4.95,
-    "lumea deco":   6.95,
-    "lumea":        6.95,
-    "ellos":        5.95,
+STORE_INFO = {
+    "ikea":         {"country": "NL", "base":  5.95},
+    "bol.com":      {"country": "NL", "base":  1.99},
+    "bol":          {"country": "NL", "base":  1.99},
+    "coolblue":     {"country": "NL", "base":  0.00},
+    "amazon.nl":    {"country": "NL", "base":  1.99},
+    "amazon":       {"country": "NL", "base":  1.99},
+    "amazon.de":    {"country": "DE", "base":  0.00},
+    "amazon.fr":    {"country": "FR", "base":  0.00},
+    "amazon.es":    {"country": "ES", "base":  0.00},
+    "amazon.it":    {"country": "IT", "base":  0.00},
+    "amazon.co.uk": {"country": "GB", "base":  0.00},
+    "wehkamp":      {"country": "NL", "base":  1.95},
+    "etsy":         {"country": "US", "base":  4.50},   # marketplace, sellers worldwide
+    "westwing":     {"country": "DE", "base":  4.95},
+    "westwing.nl":  {"country": "NL", "base":  4.95},
+    "h&m home":     {"country": "SE", "base":  3.95},
+    "hm home":      {"country": "SE", "base":  3.95},
+    "argos":        {"country": "GB", "base":  4.95},   # cross-border to NL adds Brexit costs
+    "fonq":         {"country": "NL", "base":  4.95},
+    "marktplaats":  {"country": "NL", "base":  0.00},
+    "intratuin":    {"country": "NL", "base":  5.95},
+    "123planten":   {"country": "NL", "base":  5.95},
+    "plantenbron":  {"country": "NL", "base":  5.95},
+    "superdecor":   {"country": "ES", "base":  4.95},
+    "lumea deco":   {"country": "RO", "base":  6.95},
+    "lumea":        {"country": "RO", "base":  6.95},
+    "ellos":        {"country": "SE", "base":  5.95},
 }
-DEFAULT_DELIVERY = 4.95
+
+# EU/EEA member states — within this set, no customs duty / no extra VAT
+# at the border (intra-EU sales handled by VAT-OSS). Anything else is
+# cross-border into EU = customs declaration possible + buyer pays import VAT.
+EU_COUNTRIES = {
+    "NL","BE","DE","FR","ES","IT","PT","AT","IE","LU","FI","SE","DK","PL",
+    "CZ","SK","HU","RO","BG","SI","HR","EE","LV","LT","CY","MT","GR",
+    # EEA non-EU: included for shipping treatment though VAT differs
+    "NO","IS","LI",
+}
+DEFAULT_BASE_DELIVERY = 4.95
+
+# Cross-border surcharge in EUR added on top of the store's base cost.
+# Numbers are realistic baselines for a small/medium parcel.
+CROSS_BORDER_EU      = 4.00     # EU → EU
+CROSS_BORDER_NON_EU  = 12.00    # crossing the customs border
 
 
-def estimate_delivery(store_name):
-    """
-    Return a typical NL delivery cost (EUR) for a given store name.
-
-    Lookup strategy:
-      1. Exact case-insensitive match on STORE_DELIVERY keys.
-      2. Substring match (either direction) so "Amazon NL" matches "amazon.nl".
-      3. DEFAULT_DELIVERY otherwise.
-    """
+def _lookup_store_info(store_name):
+    """Resolve a SerpAPI `source` to a STORE_INFO entry (case-insensitive, contains-match)."""
     if not store_name:
-        return DEFAULT_DELIVERY
+        return None
     key = store_name.lower().strip()
-    if key in STORE_DELIVERY:
-        return STORE_DELIVERY[key]
-    for known, cost in STORE_DELIVERY.items():
+    if key in STORE_INFO:
+        return STORE_INFO[key]
+    for known, info in STORE_INFO.items():
         if known in key or key in known:
-            return cost
-    return DEFAULT_DELIVERY
+            return info
+    return None
+
+
+def estimate_delivery_for(store_name, ship_to_country="NL"):
+    """
+    Estimate delivery cost (EUR) and VAT-risk flag for a given store given
+    the user's chosen ship-to country.
+
+    @return: dict with `cost` (float), `vat_risk` (bool), `cross_border` (bool)
+    """
+    info = _lookup_store_info(store_name)
+    if info is None:
+        # Unknown store — assume domestic at the default rate.
+        return {"cost": DEFAULT_BASE_DELIVERY, "vat_risk": False, "cross_border": False}
+
+    store_country = info["country"]
+    base          = info["base"]
+
+    if store_country == ship_to_country:
+        return {"cost": base, "vat_risk": False, "cross_border": False}
+
+    # Cross-border. EU↔EU is free of customs; anything that crosses the EU
+    # external border can trigger VAT/duty on the buyer side.
+    store_in_eu = store_country in EU_COUNTRIES
+    ship_in_eu  = ship_to_country in EU_COUNTRIES
+    if store_in_eu and ship_in_eu:
+        return {"cost": base + CROSS_BORDER_EU, "vat_risk": False, "cross_border": True}
+    return {"cost": base + CROSS_BORDER_NON_EU, "vat_risk": True, "cross_border": True}
+
+
+# Backwards-compatible shim used by older callers that don't pass ship_to.
+def estimate_delivery(store_name):
+    return estimate_delivery_for(store_name, "NL")["cost"]
 
 
 def ai_chat(messages):
@@ -165,52 +216,98 @@ def parse_ai_response(raw):
     return json.loads(raw[start:end])
 
 
-def _delivery_for_item(item):
+def _delivery_for_item(item, ship_to="NL"):
     """
-    Pick a delivery value for one SerpAPI shopping result. Order:
+    Pick delivery info for one SerpAPI shopping result.
+
+    Order:
       1. If SerpAPI returns a `delivery` string with a number → parse it.
-      2. If it says 'free' explicitly → 0.0.
-      3. Otherwise → fall back to per-store estimate (STORE_DELIVERY).
+      2. If it says 'free' explicitly → cost=0.
+      3. Otherwise → fall back to estimate_delivery_for(store, ship_to).
+
+    @return: (cost: float, estimated: bool, vat_risk: bool, cross_border: bool)
     """
     delivery_raw = (item.get("delivery", "") or "").strip()
     if delivery_raw:
         if "free" in delivery_raw.lower():
-            return 0.0
+            return 0.0, False, False, False
         nums = re.findall(r"\d+[\.,]?\d*", delivery_raw)
         if nums:
             try:
-                return float(nums[0].replace(",", "."))
+                return float(nums[0].replace(",", ".")), False, False, False
             except ValueError:
                 pass
-    # Fallback: per-store estimate. Better than lying about free shipping.
-    return estimate_delivery(item.get("source", ""))
+    # Fallback: per-store + ship-to estimate.
+    est = estimate_delivery_for(item.get("source", ""), ship_to)
+    return est["cost"], True, est["vat_risk"], est["cross_border"]
 
 
-def serpapi_search(query, num=5):
+def serpapi_search(query, num=5, price_min=None, price_max=None, ship_to="NL"):
     """
     Run a Google Shopping search via SerpAPI and normalize the results.
 
     Returns a list of product dicts with deterministic ids `r0..rN`. The
     `match` field is a placeholder here, overwritten by `ai_score_products`
     before the response is returned to the UI.
+
+    @param query:     Search query (already AI-refined).
+    @param num:       Max number of products to fetch.
+    @param price_min: Optional lower bound in EUR. Used in SerpAPI's tbs filter.
+    @param price_max: Optional upper bound in EUR. Same.
     """
     if not SERPAPI_KEY:
         raise RuntimeError("SERPAPI_KEY not set — add it to monkibasket/.env")
-    params = urllib.parse.urlencode({
+
+    # SerpAPI / Google Shopping price filter via the `tbs` parameter:
+    #   mr:1          → multi-row results
+    #   price:1       → enable price filtering
+    #   ppr_min:X     → minimum price
+    #   ppr_max:Y     → maximum price
+    # We fetch 2× num so we have room to drop bad matches later.
+    tbs_parts = []
+    if price_min is not None or price_max is not None:
+        tbs_parts.append("mr:1")
+        tbs_parts.append("price:1")
+        if price_min is not None:
+            tbs_parts.append(f"ppr_min:{price_min}")
+        if price_max is not None:
+            tbs_parts.append(f"ppr_max:{price_max}")
+
+    qs = {
         "engine":  "google_shopping",
         "q":       query,
         "api_key": SERPAPI_KEY,
         "gl":      "nl",
         "hl":      "en",
-        "num":     num,
-    })
+        "num":     max(num, 10),
+    }
+    if tbs_parts:
+        qs["tbs"] = ",".join(tbs_parts)
+
+    params = urllib.parse.urlencode(qs)
     url = "https://serpapi.com/search?" + params
     req = urllib.request.Request(url, headers={"User-Agent": "MonkiBasket/1.0"})
     with urllib.request.urlopen(req, timeout=20) as resp:
         data = json.loads(resp.read())
 
+    raw_items = data.get("shopping_results", [])
+
+    # Defensive post-filter: Google sometimes ignores ppr_max for marketplace
+    # items, so drop anything significantly over budget here too. We allow
+    # 10% over the cap (sales / VAT roundings).
+    if price_max is not None:
+        cap = price_max * 1.10
+        raw_items = [it for it in raw_items if (
+            (it.get("extracted_price") or 0) <= cap
+        )]
+    if price_min is not None:
+        floor = price_min * 0.90
+        raw_items = [it for it in raw_items if (
+            (it.get("extracted_price") or float("inf")) >= floor
+        )]
+
     products = []
-    for i, item in enumerate(data.get("shopping_results", [])[:num]):
+    for i, item in enumerate(raw_items[:num]):
         raw_price = item.get("price", "0")
         price_str = raw_price.replace("€", "").replace("$", "").replace(",", ".").strip().split()[0]
         try:
@@ -218,11 +315,8 @@ def serpapi_search(query, num=5):
         except ValueError:
             price = 0.0
 
-        store    = item.get("source", "Online store")
-        delivery = _delivery_for_item(item)
-        # If SerpAPI gave us a real string we used regex; otherwise the cost
-        # came from STORE_DELIVERY — mark the row so the UI can show "est."
-        delivery_estimated = not bool(item.get("delivery"))
+        store = item.get("source", "Online store")
+        delivery, est, vat_risk, cross_border = _delivery_for_item(item, ship_to)
 
         products.append({
             "id":                 "r" + str(i),
@@ -231,7 +325,9 @@ def serpapi_search(query, num=5):
             "img":                item.get("thumbnail", ""),
             "price":              price,
             "delivery":           delivery,
-            "delivery_estimated": delivery_estimated,
+            "delivery_estimated": est,
+            "vat_risk":           vat_risk,
+            "cross_border":       cross_border,
             "total":              round(price + delivery, 2),
             "rating":             float(item.get("rating", 0)) or None,
             "reviews":            item.get("reviews"),
@@ -314,6 +410,9 @@ def chat():
     body      = request.get_json(force=True)
     user_text = (body.get("message") or "").strip()
     history   = body.get("history") or []
+    # Ship-to country: 2-letter ISO code from the UI dropdown. Defaults to NL
+    # for backwards compatibility with older clients that don't send it.
+    ship_to   = (body.get("ship_to") or "NL").upper().strip()[:2]
 
     if not user_text:
         return jsonify({"type": "chat", "intro": "What can I help you find?"})
@@ -338,11 +437,28 @@ def chat():
         return jsonify({"type": "chat", "intro": reply})
 
     search_query = ai_data.get("query", user_text)
+    price_max   = ai_data.get("price_max")
+    price_min   = ai_data.get("price_min")
+    # Defensive: the LLM might return strings like "25" — coerce or drop.
+    def _to_num(v):
+        if v is None: return None
+        try: return float(v)
+        except (TypeError, ValueError): return None
+    price_max = _to_num(price_max)
+    price_min = _to_num(price_min)
+
     try:
-        products = serpapi_search(search_query, num=5)
+        products = serpapi_search(search_query, num=6,
+                                   price_min=price_min, price_max=price_max,
+                                   ship_to=ship_to)
         if not products:
-            return jsonify({"type": "chat",
-                            "intro": reply + " I couldn't find results — try rephrasing."})
+            # Build a more useful "no results" message when a budget caused
+            # the filter to drop everything — invites the user to relax it.
+            if price_max is not None:
+                msg = f" I couldn't find matches under €{price_max:g}. Try raising the budget or relaxing other constraints."
+            else:
+                msg = " I couldn't find results — try rephrasing."
+            return jsonify({"type": "chat", "intro": reply + msg})
 
         # Score against the ORIGINAL user text (richer than the AI-refined
         # query — preserves price caps, style words, etc).
@@ -350,11 +466,21 @@ def chat():
         # Re-rank: highest match first, cheaper total as tie-breaker.
         products.sort(key=lambda p: (-p["match"], p["total"]))
 
+        # Surface the constraint we applied so the UI can show it as a chip.
+        applied = []
+        if price_max is not None: applied.append(f"≤ €{price_max:g}")
+        if price_min is not None: applied.append(f"≥ €{price_min:g}")
+        intro = reply
+        if applied:
+            intro += f" Filtered to: {' & '.join(applied)}."
+
         return jsonify({
-            "type":     "results",
-            "intro":    reply,
-            "results":  products,
-            "category": search_query,
+            "type":      "results",
+            "intro":     intro,
+            "results":   products,
+            "category":  search_query,
+            "price_max": price_max,
+            "price_min": price_min,
         })
     except Exception as e:
         print("SerpAPI error:", e)

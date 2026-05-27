@@ -43,12 +43,21 @@
   .history-delete{opacity:0;background:none;border:none;color:var(--faint);cursor:pointer;font-size:16px;padding:0 2px;flex-shrink:0;line-height:1}
   .history-item:hover .history-delete{opacity:1}
   .history-delete:hover{color:#e24b4a}
+  /* Ship-to row above user identity. The country picker is a real product
+   * input now (drives delivery estimates + cross-border / VAT flags), not
+   * just chrome. */
+  .ship-to{padding:10px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .ship-to-label{font-size:11px;color:var(--muted);white-space:nowrap}
+  .ship-to-select{flex:1;font-size:12px;font-family:inherit;border:1px solid var(--line2);border-radius:6px;padding:5px 8px;background:#fff;color:var(--text);cursor:pointer;outline:none}
+  .ship-to-select:focus{border-color:var(--accent)}
   /* Sidebar foot: user identity row (avatar + name + plan). */
   .sidebar-foot{padding:12px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
   .user-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid var(--line2)}
   .user-info{flex:1;min-width:0}
   .user-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .user-plan{font-size:11px;color:var(--muted)}
+  /* VAT/customs warning pill on cards for cross-border non-EU listings. */
+  .vat-flag{display:inline-block;background:#FFE9E9;color:#A4302A;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;margin-left:4px}
 
   /* ===== CENTER ===== */
   .main{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -73,12 +82,13 @@
   .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
   @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
 
-  /* ----- Product cards: 2-column image-first grid -----
+  /* ----- Product cards: responsive image-first grid -----
    * The product photo IS the most useful piece of data we get from SerpAPI,
-   * so it deserves to be the dominant element. Two cards per row gives a
-   * dense overview without forcing users to click through to see what
-   * something looks like. */
-  .cards{margin-top:14px;display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+   * so it deserves to be the dominant element. We use auto-fill with a
+   * 200px minimum so the grid naturally fits 3 cards/row at the chat width
+   * (~760px), 4 on wider screens, and falls back to 2 then 1 on narrow ones.
+   * No JS / media-query gymnastics — pure CSS. */
+  .cards{margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s;position:relative}
   .card:hover{border-color:#ccc;box-shadow:0 2px 6px rgba(0,0,0,.04)}
   .card.best{border:1.5px solid var(--accent)}
@@ -100,10 +110,14 @@
   .card-store{font-size:11.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .card-rating{color:var(--text)}
 
+  /* Prices: the SerpAPI price is the only number we trust. Delivery is an
+   * estimate, so we show it small and labeled — never combined into a fake
+   * "total" on the card. The basket does totals where the "est." caveat is
+   * clearly part of the line label. */
   .card-prices{margin-top:2px}
   .card-price-main{font-size:17px;font-weight:600;color:var(--text)}
   .card-price-sub{font-size:11px;color:var(--faint);margin-top:1px}
-  .delivery-est{color:var(--warn-tx);background:var(--warn-bg);padding:1px 5px;border-radius:8px;font-size:10px;margin-left:3px;vertical-align:1px}
+  .delivery-est{color:var(--warn-tx);background:var(--warn-bg);padding:1px 5px;border-radius:8px;font-size:10px;cursor:help}
 
   .card-fit{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-top:1px}
   .card-fit-bar{width:48px;height:3px;background:#eee;border-radius:2px;overflow:hidden}
@@ -208,6 +222,19 @@
   <button class="new-chat" onclick="newChat()">＋ New search</button>
   <div class="history-label">Recent</div>
   <div class="history" id="history"></div>
+  <div class="ship-to">
+    <span class="ship-to-label">📍 Ship to</span>
+    <select class="ship-to-select" id="shipToSelect" onchange="onShipToChange(this.value)">
+      <option value="NL">🇳🇱 Netherlands</option>
+      <option value="BE">🇧🇪 Belgium</option>
+      <option value="DE">🇩🇪 Germany</option>
+      <option value="FR">🇫🇷 France</option>
+      <option value="ES">🇪🇸 Spain</option>
+      <option value="IT">🇮🇹 Italy</option>
+      <option value="GB">🇬🇧 United Kingdom</option>
+      <option value="US">🇺🇸 United States</option>
+    </select>
+  </div>
   <div class="sidebar-foot">
     <img class="user-avatar" src="/pfp.png" alt="avatar" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=MonkiUser'"/>
     <div class="user-info">
@@ -288,7 +315,7 @@
  *   comparing     — Set of product ids selected for side-by-side comparison
  * ========================================================================== */
 
-const STORAGE_KEY = 'monki_state_v3';
+const STORAGE_KEY = 'monki_state_v4';
 const USER_NAME   = 'Kaysiia T.';
 const USER_AVATAR = '/pfp.png';
 
@@ -297,13 +324,15 @@ let activeChat   = null;
 let basketMap    = {};
 let resultsCache = {};
 let comparing    = new Set();
+let shipTo       = 'NL';   // ISO-2 country code, persisted in localStorage
 
 /* ---------- localStorage persistence ---------- */
 function saveState(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       chats, activeChat, basketMap, resultsCache,
-      comparing: [...comparing]
+      comparing: [...comparing],
+      shipTo
     }));
   }catch(e){ console.warn('Save failed:', e); }
 }
@@ -316,8 +345,17 @@ function loadState(){
     basketMap    = s.basketMap    || {};
     resultsCache = s.resultsCache || {};
     comparing    = new Set(s.comparing || []);
+    shipTo       = s.shipTo       || 'NL';
     return true;
   }catch(e){ console.warn('Load failed:', e); return false; }
+}
+
+/* ---------- Ship-to country ---------- */
+function onShipToChange(value){
+  shipTo = value;
+  saveState();
+  // No re-search — the user will trigger a new one. Delivery costs on existing
+  // results stay as they were (they reflect the country in force at search time).
 }
 
 function uid(){ return 'c' + Date.now() + Math.floor(Math.random()*1000); }
@@ -392,7 +430,7 @@ function sendMessage(){
   fetch('/chat', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({message: text, history: historyMsgs})
+    body: JSON.stringify({message: text, history: historyMsgs, ship_to: shipTo})
   }).then(r => r.json()).then(data => {
     const ai = c.messages[c.messages.length-1];
     ai.typing = false;
@@ -445,9 +483,17 @@ function renderCards(results){
     const inB    = qty > 0;
     const inCmp  = comparing.has(p.id);
     const rating = p.rating ? `<span class="card-rating">⭐ ${p.rating}${p.reviews?' ('+p.reviews+')':''}</span>` : '';
+    // Delivery line: estimate only, NO fake "= total" math. The total only
+    // appears in the basket where the line label says "(N stores, est.)".
+    const estTip = p.cross_border
+      ? `Cross-border delivery to ${shipTo} — estimate; verify at checkout.`
+      : `Typical ${shipTo} delivery for this store — verify at checkout.`;
     const deliveryHtml = p.delivery > 0
-      ? `+ €${p.delivery.toFixed(2)} delivery${p.delivery_estimated ? '<span class="delivery-est">est.</span>' : ''} = €${p.total.toFixed(2)}`
-      : `Free delivery${p.delivery_estimated ? '<span class="delivery-est">est.</span>' : ''}`;
+      ? `+ €${p.delivery.toFixed(2)} delivery${p.delivery_estimated ? ' <span class="delivery-est" title="'+estTip+'">est.</span>' : ''}`
+      : `Free delivery${p.delivery_estimated ? ' <span class="delivery-est" title="'+estTip+'">est.</span>' : ''}`;
+    // VAT-risk flag: shown when the listing crosses the EU customs border,
+    // because the buyer may owe import VAT / duties at delivery.
+    const vatFlag = p.vat_risk ? `<span class="vat-flag" title="May incur import VAT / customs duties at delivery.">⚠ VAT risk</span>` : '';
     const fitPct = Math.max(0, Math.min(100, p.match || 0));
 
     html += `
@@ -465,6 +511,7 @@ function renderCards(results){
           <div class="card-store">
             <span>${escapeHtml(p.store)}</span>
             ${rating}
+            ${vatFlag}
           </div>
           <div class="card-prices">
             <div class="card-price-main">€${p.price.toFixed(2)}</div>
@@ -653,7 +700,10 @@ function escapeAttr(s){
 }
 
 /* ---------- Bootstrap ---------- */
-if(loadState() && chats.length > 0){
+loadState();  // also restores shipTo if present
+document.getElementById('shipToSelect').value = shipTo;
+
+if(chats.length > 0){
   if(!activeChat || !chats.find(c => c.id === activeChat)) activeChat = chats[0].id;
   const c = chats.find(x => x.id === activeChat);
   document.getElementById('chatTitle').textContent = c ? c.title : 'New search';
