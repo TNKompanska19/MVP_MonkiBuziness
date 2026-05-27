@@ -5,10 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MonkiBasket - AI Shopping Assistant</title>
 <style>
+  /* ========================================================================
+   * MonkiBasket UI — 3-panel layout (sidebar | chat | basket).
+   * All styles inline so the demo runs from a single Flask template.
+   *
+   * Merged from two contributors:
+   *   - Teodora: user avatar in sidebar+chat, delete-chat button on hover,
+   *     multi-product basket (quantity controls per item).
+   *   - Pavel: 2-col image-first card grid, AI fit-score, side-by-side
+   *     compare modal, "est." delivery badge, localStorage persistence.
+   * ====================================================================== */
+
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
-    --bg:#f7f7f5;--panel:#fff;--line:#ececec;--line2:#e0e0e0;
-    --text:#1a1a1a;--muted:#888;--faint:#aaa;--accent:#1D9E75;--accent-bg:#E1F5EE;--accent-tx:#0F6E56;
+    --bg:#f7f7f5; --panel:#fff; --line:#ececec; --line2:#e0e0e0;
+    --text:#1a1a1a; --muted:#888; --faint:#aaa;
+    --accent:#1D9E75; --accent-bg:#E1F5EE; --accent-tx:#0F6E56;
+    --warn-bg:#FFF4E5; --warn-tx:#A8651A;
   }
   html,body{height:100%}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
@@ -22,6 +35,7 @@
   .new-chat:hover{background:#fafafa}
   .history-label{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;padding:8px 16px 4px}
   .history{flex:1;overflow-y:auto;padding:0 8px}
+  /* Chat history rows: delete button reveals on hover (Teodora's pattern). */
   .history-item{padding:9px 10px;border-radius:8px;font-size:13px;color:#555;cursor:pointer;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;gap:6px;transition:background .12s}
   .history-item:hover{background:#e6e5df}
   .history-item.active{background:#dedcd3;color:var(--text);font-weight:500}
@@ -29,6 +43,7 @@
   .history-delete{opacity:0;background:none;border:none;color:var(--faint);cursor:pointer;font-size:16px;padding:0 2px;flex-shrink:0;line-height:1}
   .history-item:hover .history-delete{opacity:1}
   .history-delete:hover{color:#e24b4a}
+  /* Sidebar foot: user identity row (avatar + name + plan). */
   .sidebar-foot{padding:12px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
   .user-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid var(--line2)}
   .user-info{flex:1;min-width:0}
@@ -41,11 +56,12 @@
   .topbar .title{font-size:14px;font-weight:500}
   .topbar .pill{font-size:11px;color:var(--accent-tx);background:var(--accent-bg);padding:2px 9px;border-radius:20px}
   .thread{flex:1;overflow-y:auto;padding:24px 0}
-  .thread-inner{max-width:720px;margin:0 auto;padding:0 20px}
+  .thread-inner{max-width:760px;margin:0 auto;padding:0 20px}
 
+  /* Message bubbles. Avatars are now round (user = pfp, AI = monkey emoji). */
   .msg{margin-bottom:22px;display:flex;gap:12px}
   .msg-avatar{width:32px;height:32px;border-radius:50%;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:15px}
-  .msg-avatar.user{background:#dedcd3;}
+  .msg-avatar.user{background:#dedcd3}
   .msg-avatar.user img{width:32px;height:32px;object-fit:cover;border-radius:50%;display:block}
   .msg-avatar.ai{background:var(--accent-bg);color:var(--accent-tx)}
   .msg-body{flex:1;min-width:0;padding-top:3px}
@@ -57,44 +73,59 @@
   .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
   @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
 
-  /* cards */
-  .cards{margin-top:14px;display:flex;flex-direction:column;gap:10px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;gap:13px;transition:border-color .15s}
-  .card:hover{border-color:#ccc}
+  /* ----- Product cards: 2-column image-first grid -----
+   * The product photo IS the most useful piece of data we get from SerpAPI,
+   * so it deserves to be the dominant element. Two cards per row gives a
+   * dense overview without forcing users to click through to see what
+   * something looks like. */
+  .cards{margin-top:14px;display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s;position:relative}
+  .card:hover{border-color:#ccc;box-shadow:0 2px 6px rgba(0,0,0,.04)}
   .card.best{border:1.5px solid var(--accent)}
-  .card-img{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#f5f5f5;flex-shrink:0}
-  .card-body{flex:1;min-width:0}
-  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:3px}
-  .card-name{font-size:14px;font-weight:500}
-  .card-name a{color:var(--text);text-decoration:none}
-  .card-name a:hover{color:var(--accent-tx);text-decoration:underline}
-  .badge{font-size:11px;padding:2px 9px;border-radius:20px;white-space:nowrap;flex-shrink:0}
-  .badge-best{background:var(--accent-bg);color:var(--accent-tx)}
-  .badge-store{background:#f5f5f5;color:var(--muted)}
-  .card-meta{font-size:12px;color:var(--faint);margin-bottom:6px}
-  .card-pricing{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
-  .price-main{font-size:16px;font-weight:500}
-  .price-del{font-size:12px;color:var(--faint)}
-  .card-details{display:flex;gap:13px;flex-wrap:wrap;font-size:11px;color:var(--faint);margin-bottom:8px}
-  .score-row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
-  .score-label{font-size:11px;color:var(--faint);min-width:54px}
-  .score-track{flex:1;height:3px;background:#f0f0f0;border-radius:2px}
-  .score-fill{height:3px;border-radius:2px;background:var(--accent)}
-  .score-num{font-size:11px;color:var(--faint);min-width:30px;text-align:right}
-  .card-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .btn{font-size:12px;padding:5px 12px;border:1px solid var(--line2);border-radius:7px;background:#fff;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
-  .btn-add{color:var(--text)}.btn-add:hover{background:#f5f5f5}
+  .card.comparing{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+
+  .card-photo-wrap{position:relative;width:100%;aspect-ratio:1/1;background:#f5f5f5;overflow:hidden}
+  .card-photo{width:100%;height:100%;object-fit:cover;display:block}
+
+  .rank-badge{position:absolute;top:9px;left:9px;background:var(--accent);color:#fff;font-size:11px;padding:3px 9px;border-radius:14px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .compare-check{position:absolute;top:9px;right:9px;background:#fff;border:1px solid var(--line2);border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;color:var(--muted);transition:all .12s}
+  .compare-check:hover{border-color:var(--accent);color:var(--accent-tx)}
+  .compare-check.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .compare-check input{accent-color:#fff;width:11px;height:11px;margin:0;cursor:pointer}
+
+  .card-body{padding:11px 13px 12px;display:flex;flex-direction:column;gap:5px;flex:1}
+  .card-title{font-size:13.5px;font-weight:500;line-height:1.35;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:36px}
+  .card-title a{color:inherit;text-decoration:none}
+  .card-title a:hover{color:var(--accent-tx)}
+  .card-store{font-size:11.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .card-rating{color:var(--text)}
+
+  .card-prices{margin-top:2px}
+  .card-price-main{font-size:17px;font-weight:600;color:var(--text)}
+  .card-price-sub{font-size:11px;color:var(--faint);margin-top:1px}
+  .delivery-est{color:var(--warn-tx);background:var(--warn-bg);padding:1px 5px;border-radius:8px;font-size:10px;margin-left:3px;vertical-align:1px}
+
+  .card-fit{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-top:1px}
+  .card-fit-bar{width:48px;height:3px;background:#eee;border-radius:2px;overflow:hidden}
+  .card-fit-fill{height:3px;background:var(--accent)}
+
+  /* Actions row: basket button (becomes ± qty controls once added), view link. */
+  .card-actions{display:flex;gap:5px;margin-top:6px;align-items:center}
+  .btn{font-size:11.5px;padding:5px 10px;border:1px solid var(--line2);border-radius:7px;background:#fff;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px;line-height:1;color:var(--text);font-family:inherit}
+  .btn-add{flex:1;justify-content:center}
+  .btn-add:hover{background:#f5f5f5}
   .btn-add.added{border-color:var(--accent);color:var(--accent-tx);background:var(--accent-bg)}
-  .btn-view{color:var(--muted)}.btn-view:hover{background:#f5f5f5}
-  .qty-wrap{display:none;align-items:center;gap:4px}
+  .btn-view{color:var(--muted);padding:5px 9px}
+  .btn-view:hover{background:#f5f5f5}
+  .qty-wrap{display:none;align-items:center;gap:3px;flex:1;justify-content:center;border:1px solid var(--accent);background:var(--accent-bg);border-radius:7px;padding:3px}
   .qty-wrap.visible{display:flex}
-  .qty-btn{width:24px;height:24px;border:1px solid var(--line2);border-radius:5px;background:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
-  .qty-btn:hover{background:#f5f5f5}
-  .qty-num{font-size:12px;font-weight:500;min-width:16px;text-align:center}
+  .qty-btn{width:22px;height:22px;border:none;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;color:var(--accent-tx);display:flex;align-items:center;justify-content:center;font-weight:600}
+  .qty-btn:hover{background:#fff;opacity:.85}
+  .qty-num{font-size:12px;font-weight:600;min-width:18px;text-align:center;color:var(--accent-tx)}
 
   /* composer */
   .composer{border-top:1px solid var(--line);background:var(--panel);padding:14px 20px}
-  .composer-inner{max-width:720px;margin:0 auto}
+  .composer-inner{max-width:760px;margin:0 auto}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
   .chip{font-size:12px;padding:5px 11px;border:1px solid var(--line);border-radius:20px;color:var(--muted);cursor:pointer;background:#fff;transition:all .12s}
   .chip:hover{background:#f5f5f5;color:var(--text);border-color:#ccc}
@@ -104,7 +135,36 @@
   .send-btn{width:42px;height:42px;border:none;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s}
   .send-btn:hover{opacity:.88}
 
-  /* ===== BASKET ===== */
+  /* ===== FLOATING COMPARE BAR (appears when 2+ products selected) ===== */
+  .compare-bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--text);color:#fff;padding:11px 18px;border-radius:24px;font-size:13px;display:flex;align-items:center;gap:14px;box-shadow:0 6px 20px rgba(0,0,0,.18);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+  .compare-bar.visible{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+  .compare-bar-count{background:var(--accent);padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600}
+  .compare-bar-btn{background:var(--accent);color:#fff;border:none;padding:6px 13px;border-radius:16px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit}
+  .compare-bar-clear{background:none;border:none;color:#aaa;font-size:13px;cursor:pointer;font-family:inherit;padding:0 4px}
+  .compare-bar-clear:hover{color:#fff}
+
+  /* ===== COMPARE MODAL ===== */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:none;align-items:center;justify-content:center;padding:24px}
+  .modal-overlay.visible{display:flex}
+  .modal{background:var(--panel);border-radius:14px;width:100%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+  .modal-head{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .modal-head h2{font-size:17px;font-weight:600}
+  .modal-close{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1;padding:0 4px}
+  .modal-close:hover{color:var(--text)}
+  .modal-body{padding:18px 22px;overflow:auto}
+  .compare-grid{display:grid;gap:14px}
+  .compare-col{border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+  .compare-col.best{border:1.5px solid var(--accent)}
+  .compare-col-photo{width:100%;aspect-ratio:1/1;background:#f5f5f5;object-fit:cover;display:block}
+  .compare-col-body{padding:13px 15px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .compare-row{display:flex;justify-content:space-between;font-size:12px;line-height:1.5;padding:5px 0;border-top:1px solid #f5f5f5}
+  .compare-row:first-of-type{border-top:none}
+  .compare-row .lbl{color:var(--muted)}
+  .compare-row .val{color:var(--text);text-align:right;max-width:60%}
+  .compare-col-title{font-size:13.5px;font-weight:500;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:36px}
+  .compare-col-actions{padding:12px 15px;border-top:1px solid var(--line);background:#fafafa;display:flex;gap:6px}
+
+  /* ===== RIGHT BASKET ===== */
   .basket{width:380px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
   .basket-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
   .basket-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px}
@@ -114,11 +174,11 @@
   .basket-empty .big{font-size:34px;display:block;margin-bottom:12px;opacity:.5}
   .store-group{margin-bottom:18px}
   .store-group-head{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:9px;display:flex;justify-content:space-between;padding-bottom:5px;border-bottom:1px solid var(--line)}
-  .bitem{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid #f3f3f3;align-items:center}
+  .bitem{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid #f3f3f3;align-items:flex-start}
   .bitem:last-child{border-bottom:none}
   .bitem-img{width:46px;height:46px;border-radius:7px;object-fit:cover;background:#f5f5f5;flex-shrink:0}
   .bitem-info{flex:1;min-width:0}
-  .bitem-name{font-size:13px;line-height:1.35;color:var(--text)}
+  .bitem-name{font-size:13px;line-height:1.35;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .bitem-sub{font-size:11px;color:var(--faint);margin-top:1px}
   .bitem-price{font-size:13px;font-weight:500;margin-top:3px}
   .bitem-qty{display:flex;align-items:center;gap:5px;margin-top:5px}
@@ -135,7 +195,7 @@
   .savings{font-size:12px;color:var(--accent-tx);text-align:center;margin-top:10px;line-height:1.4}
 
   @media(max-width:1200px){.basket{width:320px}}
-  @media(max-width:980px){.sidebar{display:none}}
+  @media(max-width:980px){.sidebar{display:none}.cards{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -184,7 +244,7 @@
     <div class="basket-title">🛒 Your basket <span class="basket-count" id="basketCount">0</span></div>
   </div>
   <div class="basket-body" id="basketBody">
-    <div class="basket-empty"><span class="big">🛒</span>Your basket is empty.<br>Search for products and add them here.</div>
+    <div class="basket-empty"><span class="big">🛒</span>Your basket is empty.<br>Search for products and add them here from any store.</div>
   </div>
   <div class="basket-foot" id="basketFoot" style="display:none">
     <div class="sumline"><span>Subtotal</span><span id="subtotal">€0.00</span></div>
@@ -195,232 +255,414 @@
   </div>
 </aside>
 
+<!-- Floating compare bar (appears when 2+ products selected) -->
+<div class="compare-bar" id="compareBar">
+  <span><span class="compare-bar-count" id="compareCount">0</span> selected</span>
+  <button class="compare-bar-btn" onclick="openCompareModal()">Compare side-by-side</button>
+  <button class="compare-bar-clear" onclick="clearCompare()">Clear</button>
+</div>
+
+<!-- Compare modal -->
+<div class="modal-overlay" id="compareModal" onclick="if(event.target===this)closeCompare()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Side-by-side comparison</h2>
+      <button class="modal-close" onclick="closeCompare()">×</button>
+    </div>
+    <div class="modal-body" id="compareModalBody"></div>
+  </div>
+</div>
+
 <script>
-const USER_NAME   = "Kaysiia T.";
-const USER_AVATAR = "/pfp.png";
+/* ============================================================================
+ * MonkiBasket frontend state.
+ *
+ * State (persisted to localStorage so refresh doesn't wipe demo work):
+ *   chats         — [{id, title, messages[]}]
+ *   activeChat    — id of currently-open chat
+ *   basketMap     — { productId: {product, qty} }  (Teodora's multi-product
+ *                   structure: items are keyed by id and carry a quantity)
+ *   resultsCache  — { productId: product }
+ *                   so add-to-basket works after refresh (chat messages
+ *                   reference these)
+ *   comparing     — Set of product ids selected for side-by-side comparison
+ * ========================================================================== */
 
-let chats = [], activeChat = null, basketMap = {}, resultsCache = {};
+const STORAGE_KEY = 'monki_state_v3';
+const USER_NAME   = 'Kaysiia T.';
+const USER_AVATAR = '/pfp.png';
 
-function uid(){ return 'c'+Date.now()+Math.floor(Math.random()*1000); }
+let chats        = [];
+let activeChat   = null;
+let basketMap    = {};
+let resultsCache = {};
+let comparing    = new Set();
 
-function newChat(){
-  const c={id:uid(),title:'New search',messages:[]};
-  chats.unshift(c); activeChat=c.id;
-  renderHistory(); renderThread();
-  document.getElementById('chatTitle').textContent='New search';
-  document.getElementById('chips').style.display='flex';
+/* ---------- localStorage persistence ---------- */
+function saveState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      chats, activeChat, basketMap, resultsCache,
+      comparing: [...comparing]
+    }));
+  }catch(e){ console.warn('Save failed:', e); }
+}
+function loadState(){
+  try{
+    const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    if(!s) return false;
+    chats        = s.chats        || [];
+    activeChat   = s.activeChat   || null;
+    basketMap    = s.basketMap    || {};
+    resultsCache = s.resultsCache || {};
+    comparing    = new Set(s.comparing || []);
+    return true;
+  }catch(e){ console.warn('Load failed:', e); return false; }
 }
 
+function uid(){ return 'c' + Date.now() + Math.floor(Math.random()*1000); }
+
+/* ---------- Chat thread management ---------- */
+function newChat(){
+  const c = {id:uid(), title:'New search', messages:[]};
+  chats.unshift(c);
+  activeChat = c.id;
+  renderHistory(); renderThread();
+  document.getElementById('chatTitle').textContent = 'New search';
+  document.getElementById('chips').style.display = 'flex';
+  saveState();
+}
 function renderHistory(){
-  document.getElementById('history').innerHTML=chats.map(c=>`
+  document.getElementById('history').innerHTML = chats.map(c => `
     <div class="history-item ${c.id===activeChat?'active':''}" onclick="openChat('${c.id}')">
       <span class="history-item-title">${escapeHtml(c.title)}</span>
-      <button class="history-delete" onclick="deleteChat(event,'${c.id}')">×</button>
+      <button class="history-delete" onclick="deleteChat(event,'${c.id}')" title="Delete chat">×</button>
     </div>`).join('');
 }
-
-function deleteChat(e,id){
+function deleteChat(e, id){
   e.stopPropagation();
-  chats=chats.filter(c=>c.id!==id);
-  if(activeChat===id){ activeChat=chats.length?chats[0].id:null; if(!activeChat)newChat(); else openChat(activeChat); }
-  renderHistory();
+  chats = chats.filter(c => c.id !== id);
+  if(activeChat === id){
+    activeChat = chats.length ? chats[0].id : null;
+    if(!activeChat) newChat(); else openChat(activeChat);
+  } else {
+    renderHistory();
+  }
+  saveState();
 }
-
 function openChat(id){
-  activeChat=id; renderHistory(); renderThread();
-  const c=chats.find(x=>x.id===id);
-  document.getElementById('chatTitle').textContent=c.title;
-  document.getElementById('chips').style.display=c.messages.length?'none':'flex';
+  activeChat = id;
+  renderHistory(); renderThread();
+  const c = chats.find(x => x.id === id);
+  if(c){
+    document.getElementById('chatTitle').textContent = c.title;
+    document.getElementById('chips').style.display = c.messages.length ? 'none' : 'flex';
+  }
+  saveState();
 }
-
-function quick(t){ document.getElementById('input').value=t; sendMessage(); }
-function onKey(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+function quick(t){ document.getElementById('input').value = t; sendMessage(); }
+function onKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } }
 function autoGrow(el){ el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,120)+'px'; }
 
-function userAvatarHTML(){
-  return `<div class="msg-avatar user"><img src="${USER_AVATAR}" alt="${USER_NAME}" onerror="this.parentElement.innerHTML='${USER_NAME.slice(0,2)}'"/></div>`;
-}
-
+/* ---------- Sending a message + receiving results ---------- */
 function sendMessage(){
-  const input=document.getElementById('input'); const text=input.value.trim();
+  const input = document.getElementById('input');
+  const text  = input.value.trim();
   if(!text) return;
   if(!activeChat) newChat();
-  const c=chats.find(x=>x.id===activeChat);
-  if(c.messages.length===0){
-    c.title=text.length>34?text.slice(0,34)+'…':text;
-    document.getElementById('chatTitle').textContent=c.title; renderHistory();
+
+  const c = chats.find(x => x.id === activeChat);
+  if(c.messages.length === 0){
+    c.title = text.length > 34 ? text.slice(0,34)+'…' : text;
+    document.getElementById('chatTitle').textContent = c.title;
+    renderHistory();
   }
-  c.messages.push({role:'user',text});
-  input.value=''; input.style.height='auto';
-  document.getElementById('chips').style.display='none';
+  c.messages.push({role:'user', text});
+  input.value = ''; input.style.height = 'auto';
+  document.getElementById('chips').style.display = 'none';
   renderThread();
-  c.messages.push({role:'ai',typing:true}); renderThread();
-  const historyMsgs=c.messages.slice(0,-1).filter(m=>!m.typing).map(m=>({
-    role:m.role==='user'?'user':'assistant',content:m.text||''
-  }));
-  fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({message:text,history:historyMsgs})
-  }).then(r=>r.json()).then(data=>{
-    const ai=c.messages[c.messages.length-1];
-    ai.typing=false; ai.text=data.intro;
-    if(data.type==='results'&&data.results){
-      ai.results=data.results;
-      data.results.forEach(p=>resultsCache[p.id]=p);
+
+  c.messages.push({role:'ai', typing:true});
+  renderThread();
+
+  const historyMsgs = c.messages.slice(0,-1)
+    .filter(m => !m.typing)
+    .map(m => ({role: m.role==='user'?'user':'assistant', content: m.text || ''}));
+
+  fetch('/chat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message: text, history: historyMsgs})
+  }).then(r => r.json()).then(data => {
+    const ai = c.messages[c.messages.length-1];
+    ai.typing = false;
+    ai.text   = data.intro;
+    if(data.type === 'results' && data.results){
+      ai.results = data.results;
+      data.results.forEach(p => resultsCache[p.id] = p);
     }
     renderThread();
+    saveState();
+  }).catch(err => {
+    const ai = c.messages[c.messages.length-1];
+    ai.typing = false;
+    ai.text   = "Network error: " + err.message;
+    renderThread();
+    saveState();
   });
+}
+
+/* ---------- Rendering ---------- */
+function userAvatarHTML(){
+  return `<div class="msg-avatar user"><img src="${USER_AVATAR}" alt="${escapeHtml(USER_NAME)}" onerror="this.parentElement.innerHTML='${USER_NAME.slice(0,2)}'"/></div>`;
 }
 
 function renderThread(){
-  const inner=document.getElementById('threadInner');
-  const c=chats.find(x=>x.id===activeChat);
-  if(!c){inner.innerHTML='';return;}
-  inner.innerHTML=c.messages.map(m=>{
-    if(m.role==='user') return `<div class="msg">
-      ${userAvatarHTML()}
-      <div class="msg-body"><div class="msg-role">${escapeHtml(USER_NAME)}</div><div class="msg-text">${escapeHtml(m.text)}</div></div>
-    </div>`;
-    const body=m.typing
-      ?`<div class="typing"><span></span><span></span><span></span></div>`
-      :`<div class="msg-text">${escapeHtml(m.text)}</div>`+(m.results?renderCards(m.results):'');
-    return `<div class="msg">
-      <div class="msg-avatar ai">🐵</div>
-      <div class="msg-body"><div class="msg-role">MonkiBasket</div>${body}</div>
-    </div>`;
+  const inner = document.getElementById('threadInner');
+  const c = chats.find(x => x.id === activeChat);
+  if(!c){ inner.innerHTML = ''; return; }
+  inner.innerHTML = c.messages.map(m => {
+    if(m.role === 'user'){
+      return `<div class="msg">${userAvatarHTML()}<div class="msg-body"><div class="msg-role">${escapeHtml(USER_NAME)}</div><div class="msg-text">${escapeHtml(m.text)}</div></div></div>`;
+    }
+    const body = m.typing
+      ? `<div class="typing"><span></span><span></span><span></span></div>`
+      : `<div class="msg-text">${escapeHtml(m.text||'')}</div>` + (m.results ? renderCards(m.results) : '');
+    return `<div class="msg"><div class="msg-avatar ai">🐵</div><div class="msg-body"><div class="msg-role">MonkiBasket</div>${body}</div></div>`;
   }).join('');
-  document.getElementById('thread').scrollTop=99999;
+  document.getElementById('thread').scrollTop = 99999;
 }
 
+/**
+ * Render a row of product cards: 2-col grid, big square photos, compare
+ * checkbox top-right, qty controls swap in once added to basket.
+ */
 function renderCards(results){
-  let html='<div class="cards">';
-  results.forEach((p,i)=>{
-    const best=i===0;
-    const qty=basketMap[p.id]?basketMap[p.id].qty:0;
-    const inB=qty>0;
-    html+=`<div class="card ${best?'best':''}">
-      <img class="card-img" src="${p.img}" alt="${p.name}" loading="lazy" onerror="this.style.background='#eee'"/>
-      <div class="card-body">
-        <div class="card-top">
-          <div class="card-name"><a href="${p.url}" target="_blank" rel="noopener">${p.name} ↗</a></div>
-          <span class="badge ${best?'badge-best':'badge-store'}">${best?'✓ best match':p.store}</span>
+  let html = '<div class="cards">';
+  results.forEach((p, i) => {
+    const best   = i === 0;
+    const qty    = basketMap[p.id] ? basketMap[p.id].qty : 0;
+    const inB    = qty > 0;
+    const inCmp  = comparing.has(p.id);
+    const rating = p.rating ? `<span class="card-rating">⭐ ${p.rating}${p.reviews?' ('+p.reviews+')':''}</span>` : '';
+    const deliveryHtml = p.delivery > 0
+      ? `+ €${p.delivery.toFixed(2)} delivery${p.delivery_estimated ? '<span class="delivery-est">est.</span>' : ''} = €${p.total.toFixed(2)}`
+      : `Free delivery${p.delivery_estimated ? '<span class="delivery-est">est.</span>' : ''}`;
+    const fitPct = Math.max(0, Math.min(100, p.match || 0));
+
+    html += `
+      <div class="card ${best?'best':''} ${inCmp?'comparing':''}">
+        <div class="card-photo-wrap">
+          <img class="card-photo" src="${escapeAttr(p.img)}" alt="${escapeAttr(p.name)}" loading="lazy" onerror="this.style.opacity=.3"/>
+          ${best ? '<span class="rank-badge">✓ best match</span>' : ''}
+          <label class="compare-check ${inCmp?'on':''}" title="Add to side-by-side comparison">
+            <input type="checkbox" ${inCmp?'checked':''} onchange="toggleCompare('${p.id}')"/>
+            <span>compare</span>
+          </label>
         </div>
-        <div class="card-meta">${p.store}${p.material?' · '+p.material:''}</div>
-        <div class="card-pricing">
-          <span class="price-main">€${p.price.toFixed(2)}</span>
-          <span class="price-del">${p.delivery>0?'+ €'+p.delivery.toFixed(2)+' delivery':'✓ free delivery'}</span>
-        </div>
-        <div class="card-details">
-          ${p.rating?`<span>⭐ ${p.rating}</span>`:''}
-          ${p.note?`<span>${p.note}</span>`:''}
-        </div>
-        <div class="score-row">
-          <span class="score-label">fit score</span>
-          <div class="score-track"><div class="score-fill" style="width:${p.match}%"></div></div>
-          <span class="score-num">${p.match}%</span>
-        </div>
-        <div class="card-actions">
-          <button class="btn btn-add ${inB?'added':''}" id="btn-${p.id}" onclick="addToBasket('${p.id}')">${inB?'✓ added':'+ add to basket'}</button>
-          <div class="qty-wrap ${inB?'visible':''}" id="qty-${p.id}">
-            <button class="qty-btn" onclick="changeQty('${p.id}',-1)">−</button>
-            <span class="qty-num" id="qnum-${p.id}">${qty}</span>
-            <button class="qty-btn" onclick="changeQty('${p.id}',1)">+</button>
+        <div class="card-body">
+          <div class="card-title"><a href="${escapeAttr(p.url)}" target="_blank" rel="noopener">${escapeHtml(p.name)}</a></div>
+          <div class="card-store">
+            <span>${escapeHtml(p.store)}</span>
+            ${rating}
           </div>
-          <a class="btn btn-view" href="${p.url}" target="_blank" rel="noopener">↗ view on ${p.store}</a>
+          <div class="card-prices">
+            <div class="card-price-main">€${p.price.toFixed(2)}</div>
+            <div class="card-price-sub">${deliveryHtml}</div>
+          </div>
+          <div class="card-fit">
+            fit
+            <div class="card-fit-bar"><div class="card-fit-fill" style="width:${fitPct}%"></div></div>
+            ${fitPct}%
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-add ${inB?'added':''}" id="btn-${p.id}" onclick="addToBasket('${p.id}')" style="${inB?'display:none':''}">
+              + basket
+            </button>
+            <div class="qty-wrap ${inB?'visible':''}" id="qty-${p.id}">
+              <button class="qty-btn" onclick="changeQty('${p.id}',-1)">−</button>
+              <span class="qty-num" id="qnum-${p.id}">${qty}</span>
+              <button class="qty-btn" onclick="changeQty('${p.id}',1)">+</button>
+            </div>
+            <a class="btn btn-view" href="${escapeAttr(p.url)}" target="_blank" rel="noopener" title="Open on ${escapeAttr(p.store)}">↗</a>
+          </div>
         </div>
-      </div>
-    </div>`;
+      </div>`;
   });
-  return html+'</div>';
+  return html + '</div>';
 }
 
+/* ---------- Basket (multi-product with qty) ---------- */
 function addToBasket(id){
-  const p=resultsCache[id]; if(!p) return;
-  if(!basketMap[id]) basketMap[id]={product:p,qty:0};
+  const p = resultsCache[id];
+  if(!p) return;
+  if(!basketMap[id]) basketMap[id] = {product:p, qty:0};
   basketMap[id].qty++;
-  updateCardButtons(id); renderBasket();
+  updateCardControls(id);
+  renderBasket();
+  saveState();
 }
-
-function changeQty(id,delta){
+function changeQty(id, delta){
   if(!basketMap[id]) return;
-  basketMap[id].qty=Math.max(0,basketMap[id].qty+delta);
-  if(basketMap[id].qty===0) delete basketMap[id];
-  updateCardButtons(id); renderBasket();
+  basketMap[id].qty = Math.max(0, basketMap[id].qty + delta);
+  if(basketMap[id].qty === 0) delete basketMap[id];
+  updateCardControls(id);
+  renderBasket();
+  saveState();
 }
-
-function updateCardButtons(id){
-  const qty=basketMap[id]?basketMap[id].qty:0;
-  const btn=document.getElementById('btn-'+id);
-  const qwrap=document.getElementById('qty-'+id);
-  const qnum=document.getElementById('qnum-'+id);
-  if(btn){btn.className='btn btn-add'+(qty>0?' added':'');btn.textContent=qty>0?'✓ added':'+ add to basket';}
-  if(qwrap){qwrap.className='qty-wrap'+(qty>0?' visible':'');}
-  if(qnum){qnum.textContent=qty;}
-}
-
 function removeFromBasket(id){
   delete basketMap[id];
-  updateCardButtons(id); renderBasket();
-}
-
-function basketChangeQty(id,delta){
-  if(!basketMap[id]) return;
-  basketMap[id].qty=Math.max(0,basketMap[id].qty+delta);
-  if(basketMap[id].qty===0){delete basketMap[id]; updateCardButtons(id);}
+  updateCardControls(id);
   renderBasket();
+  saveState();
+}
+/** Swap add-button ↔ qty-controls on a single card without full re-render. */
+function updateCardControls(id){
+  const qty   = basketMap[id] ? basketMap[id].qty : 0;
+  const btn   = document.getElementById('btn-' + id);
+  const qwrap = document.getElementById('qty-' + id);
+  const qnum  = document.getElementById('qnum-' + id);
+  if(btn)   btn.style.display = qty > 0 ? 'none' : '';
+  if(qwrap) qwrap.className = 'qty-wrap' + (qty > 0 ? ' visible' : '');
+  if(qnum)  qnum.textContent = qty;
 }
 
 function renderBasket(){
-  const totalItems=Object.values(basketMap).reduce((s,b)=>s+b.qty,0);
-  document.getElementById('basketCount').textContent=totalItems;
-  const body=document.getElementById('basketBody'),foot=document.getElementById('basketFoot');
-  if(totalItems===0){
-    body.innerHTML='<div class="basket-empty"><span class="big">🛒</span>Your basket is empty.<br>Search for products and add them here.</div>';
-    foot.style.display='none'; return;
+  const totalItems = Object.values(basketMap).reduce((s, b) => s + b.qty, 0);
+  document.getElementById('basketCount').textContent = totalItems;
+
+  const body = document.getElementById('basketBody');
+  const foot = document.getElementById('basketFoot');
+  if(totalItems === 0){
+    body.innerHTML = '<div class="basket-empty"><span class="big">🛒</span>Your basket is empty.<br>Search for products and add them here from any store.</div>';
+    foot.style.display = 'none';
+    return;
   }
-  const groups={};
-  Object.values(basketMap).forEach(({product:p,qty})=>{
-    if(!groups[p.store]) groups[p.store]=[];
-    groups[p.store].push({p,qty});
+
+  /* Group by store so the user sees what they'd check out from where. */
+  const groups = {};
+  Object.values(basketMap).forEach(({product:p, qty}) => {
+    if(!groups[p.store]) groups[p.store] = [];
+    groups[p.store].push({p, qty});
   });
-  let html='';
-  Object.entries(groups).forEach(([store,items])=>{
-    const storeQty=items.reduce((s,i)=>s+i.qty,0);
-    html+=`<div class="store-group"><div class="store-group-head"><span>${store}</span><span>${storeQty} item${storeQty>1?'s':''}</span></div>`;
-    items.forEach(({p,qty})=>{
-      html+=`<div class="bitem">
-        <img class="bitem-img" src="${p.img}" alt="" onerror="this.style.background='#eee'"/>
-        <div class="bitem-info">
-          <div class="bitem-name">${p.name}</div>
-          <div class="bitem-sub">${p.store}</div>
-          <div class="bitem-price">€${(p.price*qty).toFixed(2)}</div>
-          <div class="bitem-qty">
-            <button class="bqty-btn" onclick="basketChangeQty('${p.id}',-1)">−</button>
-            <span class="bqty-num">${qty}</span>
-            <button class="bqty-btn" onclick="basketChangeQty('${p.id}',1)">+</button>
+
+  let html = '';
+  Object.entries(groups).forEach(([store, items]) => {
+    const storeQty = items.reduce((s, i) => s + i.qty, 0);
+    html += `<div class="store-group"><div class="store-group-head"><span>${escapeHtml(store)}</span><span>${storeQty} item${storeQty>1?'s':''}</span></div>`;
+    items.forEach(({p, qty}) => {
+      html += `
+        <div class="bitem">
+          <img class="bitem-img" src="${escapeAttr(p.img)}" alt="" onerror="this.style.opacity=.3"/>
+          <div class="bitem-info">
+            <div class="bitem-name">${escapeHtml(p.name)}</div>
+            <div class="bitem-sub">€${p.price.toFixed(2)} each</div>
+            <div class="bitem-price">€${(p.price*qty).toFixed(2)}</div>
+            <div class="bitem-qty">
+              <button class="bqty-btn" onclick="changeQty('${p.id}',-1)">−</button>
+              <span class="bqty-num">${qty}</span>
+              <button class="bqty-btn" onclick="changeQty('${p.id}',1)">+</button>
+            </div>
           </div>
-        </div>
-        <button class="bitem-remove" onclick="removeFromBasket('${p.id}')">×</button>
-      </div>`;
+          <button class="bitem-remove" onclick="removeFromBasket('${p.id}')" title="Remove">×</button>
+        </div>`;
     });
-    html+='</div>';
+    html += '</div>';
   });
-  body.innerHTML=html;
-  let subtotal=0,delivery=0;
-  Object.entries(groups).forEach(([store,items])=>{
-    items.forEach(({p,qty})=>subtotal+=p.price*qty);
-    delivery+=items[0].p.delivery||0;
+  body.innerHTML = html;
+
+  /* Totals: per-store delivery counted ONCE (typical retailer behavior). */
+  let subtotal = 0, delivery = 0;
+  Object.values(groups).forEach(items => {
+    items.forEach(({p, qty}) => subtotal += p.price * qty);
+    delivery += Math.min(...items.map(i => i.p.delivery));
   });
-  const sc=Object.keys(groups).length;
-  document.getElementById('subtotal').textContent='€'+subtotal.toFixed(2);
-  document.getElementById('delLabel').textContent='Delivery ('+sc+' store'+(sc>1?'s':'')+')';
-  document.getElementById('delTotal').textContent='€'+delivery.toFixed(2);
-  document.getElementById('grandTotal').textContent='€'+(subtotal+delivery).toFixed(2);
-  document.getElementById('savings').textContent=sc>1?'✓ '+totalItems+' items from '+sc+' stores — checked out in one click':'';
-  foot.style.display='block';
+  const sc = Object.keys(groups).length;
+  document.getElementById('subtotal').textContent = '€' + subtotal.toFixed(2);
+  document.getElementById('delLabel').textContent = 'Delivery (' + sc + ' store' + (sc>1?'s':'') + ', est.)';
+  document.getElementById('delTotal').textContent = '€' + delivery.toFixed(2);
+  document.getElementById('grandTotal').textContent = '€' + (subtotal + delivery).toFixed(2);
+  document.getElementById('savings').textContent = sc>1 ? '✓ ' + totalItems + ' items from ' + sc + ' stores — checked out in one click' : '';
+  foot.style.display = 'block';
 }
 
-function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-newChat(); renderBasket();
+/* ---------- Compare (side-by-side) ---------- */
+function toggleCompare(id){
+  if(comparing.has(id)) comparing.delete(id);
+  else                  comparing.add(id);
+  renderThread();   // re-render so the .comparing border updates
+  renderCompareBar();
+  saveState();
+}
+function clearCompare(){
+  comparing.clear();
+  renderThread();
+  renderCompareBar();
+  saveState();
+}
+function renderCompareBar(){
+  const bar   = document.getElementById('compareBar');
+  const count = document.getElementById('compareCount');
+  count.textContent = comparing.size;
+  if(comparing.size >= 2) bar.classList.add('visible');
+  else                    bar.classList.remove('visible');
+}
+function openCompareModal(){
+  const products = [...comparing].map(id => resultsCache[id]).filter(Boolean);
+  if(products.length < 2) return;
+
+  const cols = products.length;
+  const html = `
+    <div class="compare-grid" style="grid-template-columns:repeat(${cols},1fr)">
+      ${products.map((p, idx) => {
+        const inB = (basketMap[p.id]?.qty || 0) > 0;
+        return `
+        <div class="compare-col ${idx===0?'best':''}">
+          <img class="compare-col-photo" src="${escapeAttr(p.img)}" alt="${escapeAttr(p.name)}" onerror="this.style.opacity=.3"/>
+          <div class="compare-col-body">
+            <div class="compare-col-title">${escapeHtml(p.name)}</div>
+            <div class="compare-row"><span class="lbl">Store</span><span class="val">${escapeHtml(p.store)}</span></div>
+            <div class="compare-row"><span class="lbl">Price</span><span class="val">€${p.price.toFixed(2)}</span></div>
+            <div class="compare-row"><span class="lbl">Delivery${p.delivery_estimated?' (est.)':''}</span><span class="val">€${p.delivery.toFixed(2)}</span></div>
+            <div class="compare-row"><span class="lbl">Total</span><span class="val"><strong>€${p.total.toFixed(2)}</strong></span></div>
+            <div class="compare-row"><span class="lbl">Rating</span><span class="val">${p.rating ? '⭐ '+p.rating : '—'}</span></div>
+            <div class="compare-row"><span class="lbl">Fit score</span><span class="val">${p.match}%</span></div>
+          </div>
+          <div class="compare-col-actions">
+            <button class="btn btn-add ${inB?'added':''}" onclick="addToBasket('${p.id}'); openCompareModal();">
+              ${inB ? '✓ '+basketMap[p.id].qty+' in basket' : '+ basket'}
+            </button>
+            <a class="btn btn-view" href="${escapeAttr(p.url)}" target="_blank" rel="noopener">↗ store</a>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  document.getElementById('compareModalBody').innerHTML = html;
+  document.getElementById('compareModal').classList.add('visible');
+}
+function closeCompare(){
+  document.getElementById('compareModal').classList.remove('visible');
+}
+
+/* ---------- Utility ---------- */
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+function escapeAttr(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- Bootstrap ---------- */
+if(loadState() && chats.length > 0){
+  if(!activeChat || !chats.find(c => c.id === activeChat)) activeChat = chats[0].id;
+  const c = chats.find(x => x.id === activeChat);
+  document.getElementById('chatTitle').textContent = c ? c.title : 'New search';
+  document.getElementById('chips').style.display = (c && c.messages.length) ? 'none' : 'flex';
+  renderHistory(); renderThread(); renderBasket(); renderCompareBar();
+} else {
+  newChat();
+  renderBasket();
+}
 </script>
 </body>
 </html>
