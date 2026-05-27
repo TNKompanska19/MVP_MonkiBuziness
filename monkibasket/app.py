@@ -3,12 +3,12 @@ MonkiBasket MVP - AI Shopping Assistant
 MonkiBuziness 22 BV
 """
 
-from flask import Flask, render_template, jsonify, request
-import json, urllib.parse, urllib.request
+from flask import Flask, render_template, jsonify, request, send_from_directory
+import json, urllib.parse, urllib.request, re, os
 
 app = Flask(__name__)
 
-GITHUB_TOKEN = "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"
+GITHUB_TOKEN = "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"
 SERPAPI_KEY  = "fd5deb2450c242ba6ff87d990815241b879a378f3ac6cea793de41fc4e859895"
 
 SYSTEM_PROMPT = """You are MonkiBasket, a friendly AI shopping assistant. You help users find products across many online stores (IKEA, Bol.com, CoolBlue, Amazon, Etsy, Wehkamp, etc.).
@@ -74,18 +74,28 @@ def serpapi_search(query, num=5):
         except ValueError:
             price = 0.0
 
+        delivery_raw = item.get("delivery", "") or ""
+        delivery = 0.0
+        if delivery_raw and "free" not in delivery_raw.lower():
+            nums = re.findall(r'\d+[\.,]?\d*', delivery_raw)
+            if nums:
+                try:
+                    delivery = float(nums[0].replace(",", "."))
+                except:
+                    delivery = 0.0
+
         products.append({
             "id":       "r" + str(i),
             "name":     item.get("title", "Unknown product"),
             "store":    item.get("source", "Online store"),
             "img":      item.get("thumbnail", ""),
             "price":    price,
-            "delivery": 0.0,
-            "total":    price,
+            "delivery": delivery,
+            "total":    round(price + delivery, 2),
             "material": (item.get("snippet") or "")[:60],
             "dims":     "",
             "rating":   float(item.get("rating", 0)) or None,
-            "note":     item.get("delivery", "") or "",
+            "note":     delivery_raw,
             "url":      item.get("link") or item.get("product_link", "#"),
             "match":    max(60, 98 - i * 7),
         })
@@ -96,6 +106,11 @@ def serpapi_search(query, num=5):
 def index():
     return render_template("index.html")
 
+
+@app.route("/pfp.png")
+def pfp():
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+    return send_from_directory(folder, "pfp.png")
 
 @app.route("/chat", methods=["POST"])
 def chat():
