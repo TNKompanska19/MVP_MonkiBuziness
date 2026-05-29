@@ -5,28 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MonkiBasket - AI Shopping Assistant</title>
 <style>
-  /* ========================================================================
-   * MonkiBasket UI — 3-panel layout (sidebar | chat | basket).
-   * All styles inline so the demo runs from a single Flask template.
-   *
-   * Merged from two contributors:
-   *   - Teodora: user avatar in sidebar+chat, delete-chat button on hover,
-   *     multi-product basket (quantity controls per item).
-   *   - Pavel: 2-col image-first card grid, AI fit-score, side-by-side
-   *     compare modal, "est." delivery badge, localStorage persistence.
-   * ====================================================================== */
-
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
-    --bg:#f7f7f5; --panel:#fff; --line:#ececec; --line2:#e0e0e0;
-    --text:#1a1a1a; --muted:#888; --faint:#aaa;
-    --accent:#1D9E75; --accent-bg:#E1F5EE; --accent-tx:#0F6E56;
-    --warn-bg:#FFF4E5; --warn-tx:#A8651A;
+    --bg:#f7f7f5;--panel:#fff;--line:#ececec;--line2:#e0e0e0;
+    --text:#1a1a1a;--muted:#888;--faint:#aaa;
+    --accent:#1D9E75;--accent-bg:#E1F5EE;--accent-tx:#0F6E56;
+    --warn-bg:#FFF4E5;--warn-tx:#A8651A;
   }
   html,body{height:100%}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
 
-  /* ===== SIDEBAR ===== */
+  /* SIDEBAR */
   .sidebar{width:240px;background:#f0efea;border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
   .sidebar-head{padding:16px 14px;border-bottom:1px solid var(--line)}
   .brand{font-size:16px;font-weight:600;display:flex;align-items:center;gap:7px}
@@ -34,8 +23,7 @@
   .new-chat{margin:12px 14px;height:38px;border:1px solid var(--line2);border-radius:9px;background:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text);transition:background .15s}
   .new-chat:hover{background:#fafafa}
   .history-label{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;padding:8px 16px 4px}
-  .history{flex:1;overflow-y:auto;padding:0 8px}
-  /* Chat history rows: delete button reveals on hover (Teodora's pattern). */
+  .history{overflow-y:auto;padding:0 8px}
   .history-item{padding:9px 10px;border-radius:8px;font-size:13px;color:#555;cursor:pointer;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;gap:6px;transition:background .12s}
   .history-item:hover{background:#e6e5df}
   .history-item.active{background:#dedcd3;color:var(--text);font-weight:500}
@@ -43,87 +31,92 @@
   .history-delete{opacity:0;background:none;border:none;color:var(--faint);cursor:pointer;font-size:16px;padding:0 2px;flex-shrink:0;line-height:1}
   .history-item:hover .history-delete{opacity:1}
   .history-delete:hover{color:#e24b4a}
-  /* Ship-to row above user identity. The country picker is a real product
-   * input now (drives delivery estimates + cross-border / VAT flags), not
-   * just chrome. */
-  .ship-to{padding:10px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
+
+  /* ORDERS SECTION in sidebar */
+  .sidebar-section{display:flex;flex-direction:column;min-height:0}
+  .sidebar-section-chats{flex:1;min-height:60px;overflow-y:auto;display:flex;flex-direction:column}
+  .sidebar-section-orders{flex:1;min-height:60px;overflow-y:auto;display:flex;flex-direction:column}
+  .orders-label{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;padding:8px 16px 4px;display:flex;align-items:center;justify-content:space-between}
+  .orders-label button{font-size:10px;background:none;border:none;color:var(--accent-tx);cursor:pointer;font-family:inherit;padding:0}
+  .orders-label button:hover{text-decoration:underline}
+  .order-sidebar-item{padding:8px 10px;border-radius:8px;font-size:12px;color:#555;cursor:pointer;margin:0 8px 2px;display:flex;align-items:center;gap:8px;transition:background .12s}
+  .order-sidebar-item:hover{background:#e6e5df}
+  .order-sidebar-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#f5a623}
+  .order-sidebar-dot.placed{background:#1D9E75}
+  .order-sidebar-dot.shipped{background:#f5a623}
+  .order-sidebar-dot.delivered{background:#aaa}
+  .order-sidebar-info{flex:1;min-width:0}
+  .order-sidebar-store{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .order-sidebar-eta{font-size:10px;color:var(--faint);margin-top:1px}
+  .order-sidebar-empty{font-size:12px;color:var(--faint);padding:8px 18px;line-height:1.4}
+
+  .ship-to{padding:10px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-shrink:0}
   .ship-to-label{font-size:11px;color:var(--muted);white-space:nowrap}
   .ship-to-select{flex:1;font-size:12px;font-family:inherit;border:1px solid var(--line2);border-radius:6px;padding:5px 8px;background:#fff;color:var(--text);cursor:pointer;outline:none}
   .ship-to-select:focus{border-color:var(--accent)}
-  /* Sidebar foot: user identity row (avatar + name + plan). */
-  .sidebar-foot{padding:12px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .sidebar-foot{padding:12px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .15s;flex-shrink:0}
+  .sidebar-foot:hover{background:#e6e5df}
   .user-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1.5px solid var(--line2)}
   .user-info{flex:1;min-width:0}
   .user-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .user-plan{font-size:11px;color:var(--muted)}
-  /* VAT/customs warning pill on cards for cross-border non-EU listings. */
   .vat-flag{display:inline-block;background:#FFE9E9;color:#A4302A;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:500;margin-left:4px}
 
-  /* ===== CENTER ===== */
+  /* MAIN */
   .main{flex:1;display:flex;flex-direction:column;min-width:0}
   .topbar{height:52px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;background:var(--panel);gap:10px}
   .topbar .title{font-size:14px;font-weight:500}
   .topbar .pill{font-size:11px;color:var(--accent-tx);background:var(--accent-bg);padding:2px 9px;border-radius:20px}
-  .thread{flex:1;overflow-y:auto;padding:24px 0}
-  .thread-inner{max-width:760px;margin:0 auto;padding:0 20px}
-
-  /* Message bubbles. Avatars are now round (user = pfp, AI = monkey emoji). */
-  .msg{margin-bottom:22px;display:flex;gap:12px}
-  .msg-avatar{width:32px;height:32px;border-radius:50%;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:15px}
-  .msg-avatar.user{background:#dedcd3}
-  .msg-avatar.user img{width:32px;height:32px;object-fit:cover;border-radius:50%;display:block}
+  .thread{flex:1;overflow-y:auto;padding:16px 0}
+  .thread-inner{max-width:100%;margin:0;padding:0 20px}
+  /* AI message — left */
+  .msg{margin-bottom:14px;display:flex;gap:10px;align-items:flex-end}
+  .msg-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:14px}
   .msg-avatar.ai{background:var(--accent-bg);color:var(--accent-tx)}
-  .msg-body{flex:1;min-width:0;padding-top:3px}
-  .msg-role{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+  .msg-avatar.user-av{background:#dedcd3;flex-shrink:0}
+  .msg-avatar.user-av img{width:30px;height:30px;object-fit:cover;border-radius:50%;display:block}
+  .msg-body{min-width:0;max-width:88%}
+  .msg .msg-body{flex:1;max-width:calc(100% - 44px)}
+  .msg-role{font-size:11px;font-weight:600;color:var(--faint);margin-bottom:4px}
   .msg-text{font-size:14px;line-height:1.6;color:var(--text)}
-
+  /* AI bubble — white card */
+  .ai-bubble{background:#fff;border:1px solid var(--line);padding:10px 14px;border-radius:18px 18px 18px 4px;font-size:14px;line-height:1.55;color:var(--text);display:inline-block;max-width:100%;word-break:break-word}
+  /* User message — right aligned bubble */
+  .msg.user-msg{flex-direction:row-reverse}
+  .msg.user-msg .msg-body{display:flex;flex-direction:column;align-items:flex-end}
+  .msg.user-msg .msg-role{text-align:right}
+  .user-bubble{background:var(--accent);color:#fff;padding:10px 14px;border-radius:18px 18px 4px 18px;font-size:14px;line-height:1.5;max-width:100%;word-break:break-word;display:inline-block;text-align:left}
+  .msg-img-attached{margin-top:6px;max-width:260px;max-height:260px;border-radius:10px;border:1px solid rgba(255,255,255,.3);display:block;object-fit:cover}
   .typing{display:inline-flex;gap:3px;padding:4px 0}
   .typing span{width:6px;height:6px;border-radius:50%;background:var(--faint);animation:blink 1.2s infinite}
   .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
   @keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
 
-  /* ----- Product cards: responsive image-first grid -----
-   * The product photo IS the most useful piece of data we get from SerpAPI,
-   * so it deserves to be the dominant element. We use auto-fill with a
-   * 200px minimum so the grid naturally fits 3 cards/row at the chat width
-   * (~760px), 4 on wider screens, and falls back to 2 then 1 on narrow ones.
-   * No JS / media-query gymnastics — pure CSS. */
-  .cards{margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  /* CARDS */
+  .cards{margin-top:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s;position:relative}
   .card:hover{border-color:#ccc;box-shadow:0 2px 6px rgba(0,0,0,.04)}
   .card.best{border:1.5px solid var(--accent)}
   .card.comparing{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
-
   .card-photo-wrap{position:relative;width:100%;aspect-ratio:1/1;background:#f5f5f5;overflow:hidden}
   .card-photo{width:100%;height:100%;object-fit:cover;display:block}
-
   .rank-badge{position:absolute;top:9px;left:9px;background:var(--accent);color:#fff;font-size:11px;padding:3px 9px;border-radius:14px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
   .compare-check{position:absolute;top:9px;right:9px;background:#fff;border:1px solid var(--line2);border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;color:var(--muted);transition:all .12s}
   .compare-check:hover{border-color:var(--accent);color:var(--accent-tx)}
   .compare-check.on{background:var(--accent);color:#fff;border-color:var(--accent)}
   .compare-check input{accent-color:#fff;width:11px;height:11px;margin:0;cursor:pointer}
-
   .card-body{padding:11px 13px 12px;display:flex;flex-direction:column;gap:5px;flex:1}
   .card-title{font-size:13.5px;font-weight:500;line-height:1.35;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:36px}
   .card-title a{color:inherit;text-decoration:none}
   .card-title a:hover{color:var(--accent-tx)}
   .card-store{font-size:11.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .card-rating{color:var(--text)}
-
-  /* Prices: the SerpAPI price is the only number we trust. Delivery is an
-   * estimate, so we show it small and labeled — never combined into a fake
-   * "total" on the card. The basket does totals where the "est." caveat is
-   * clearly part of the line label. */
   .card-prices{margin-top:2px}
   .card-price-main{font-size:17px;font-weight:600;color:var(--text)}
   .card-price-sub{font-size:11px;color:var(--faint);margin-top:1px}
   .delivery-est{color:var(--warn-tx);background:var(--warn-bg);padding:1px 5px;border-radius:8px;font-size:10px;cursor:help}
-
   .card-fit{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin-top:1px}
   .card-fit-bar{width:48px;height:3px;background:#eee;border-radius:2px;overflow:hidden}
   .card-fit-fill{height:3px;background:var(--accent)}
-
-  /* Actions row: basket button (becomes ± qty controls once added), view link. */
   .card-actions{display:flex;gap:5px;margin-top:6px;align-items:center}
   .btn{font-size:11.5px;padding:5px 10px;border:1px solid var(--line2);border-radius:7px;background:#fff;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px;line-height:1;color:var(--text);font-family:inherit}
   .btn-add{flex:1;justify-content:center}
@@ -134,16 +127,14 @@
   .qty-wrap{display:none;align-items:center;gap:3px;flex:1;justify-content:center;border:1px solid var(--accent);background:var(--accent-bg);border-radius:7px;padding:3px}
   .qty-wrap.visible{display:flex}
   .qty-btn{width:22px;height:22px;border:none;border-radius:5px;background:#fff;cursor:pointer;font-size:13px;color:var(--accent-tx);display:flex;align-items:center;justify-content:center;font-weight:600}
-  .qty-btn:hover{background:#fff;opacity:.85}
   .qty-num{font-size:12px;font-weight:600;min-width:18px;text-align:center;color:var(--accent-tx)}
 
-  /* composer */
+  /* COMPOSER */
   .composer{border-top:1px solid var(--line);background:var(--panel);padding:14px 20px}
   .composer-inner{max-width:760px;margin:0 auto}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
   .chip{font-size:12px;padding:5px 11px;border:1px solid var(--line);border-radius:20px;color:var(--muted);cursor:pointer;background:#fff;transition:all .12s}
   .chip:hover{background:#f5f5f5;color:var(--text);border-color:#ccc}
-  /* Attached-image preview chip — sits above the textarea once user picks an image. */
   .attach-preview{display:none;align-items:center;gap:10px;padding:8px 10px;margin-bottom:8px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;font-size:12px;color:var(--accent-tx)}
   .attach-preview.visible{display:flex}
   .attach-preview img{width:42px;height:42px;border-radius:6px;object-fit:cover;flex-shrink:0;border:1px solid #fff}
@@ -160,10 +151,8 @@
   .input-row textarea:focus{border-color:#aaa}
   .send-btn{width:42px;height:42px;border:none;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s}
   .send-btn:hover{opacity:.88}
-  /* Attached image inside a chat bubble (so the user sees what they sent). */
-  .msg-img-attached{margin-top:8px;max-width:220px;max-height:220px;border-radius:10px;border:1px solid var(--line);display:block;object-fit:cover}
 
-  /* ===== FLOATING COMPARE BAR (appears when 2+ products selected) ===== */
+  /* COMPARE BAR */
   .compare-bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--text);color:#fff;padding:11px 18px;border-radius:24px;font-size:13px;display:flex;align-items:center;gap:14px;box-shadow:0 6px 20px rgba(0,0,0,.18);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
   .compare-bar.visible{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
   .compare-bar-count{background:var(--accent);padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600}
@@ -171,11 +160,11 @@
   .compare-bar-clear{background:none;border:none;color:#aaa;font-size:13px;cursor:pointer;font-family:inherit;padding:0 4px}
   .compare-bar-clear:hover{color:#fff}
 
-  /* ===== COMPARE MODAL ===== */
+  /* MODALS */
   .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:none;align-items:center;justify-content:center;padding:24px}
   .modal-overlay.visible{display:flex}
   .modal{background:var(--panel);border-radius:14px;width:100%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
-  .modal-head{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .modal-head{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
   .modal-head h2{font-size:17px;font-weight:600}
   .modal-close{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1;padding:0 4px}
   .modal-close:hover{color:var(--text)}
@@ -192,7 +181,7 @@
   .compare-col-title{font-size:13.5px;font-weight:500;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:36px}
   .compare-col-actions{padding:12px 15px;border-top:1px solid var(--line);background:#fafafa;display:flex;gap:6px}
 
-  /* ===== RIGHT BASKET ===== */
+  /* BASKET */
   .basket{width:380px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
   .basket-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
   .basket-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px}
@@ -222,6 +211,87 @@
   .checkout:hover{opacity:.88}
   .savings{font-size:12px;color:var(--accent-tx);text-align:center;margin-top:10px;line-height:1.4}
 
+  /* CHECKOUT MODAL */
+  .co-store{border-bottom:1px solid var(--line);padding:14px 20px}
+  .co-store:last-child{border-bottom:none}
+  .co-store-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .co-toggle{width:18px;height:18px;border-radius:4px;border:1.5px solid var(--line2);background:#fff;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent-tx);transition:all .15s}
+  .co-toggle.checked{background:var(--accent);border-color:var(--accent);color:#fff}
+  .co-store-name{font-size:13px;font-weight:500;flex:1}
+  .co-store-subtotal{font-size:13px;font-weight:500}
+  .co-store-subtotal.dimmed{color:var(--faint);text-decoration:line-through}
+  .co-item{display:flex;gap:10px;align-items:center;padding:6px 0}
+  .co-item-img{width:38px;height:38px;border-radius:7px;object-fit:cover;background:#f5f5f5;flex-shrink:0}
+  .co-item-name{flex:1;font-size:12px;line-height:1.35;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .co-item-price{font-size:12px;font-weight:500;white-space:nowrap}
+  .co-item-qty{font-size:11px;color:var(--faint)}
+  .co-delivery{font-size:11px;color:var(--muted);margin-top:6px}
+  .co-store.skipped{opacity:.45}
+  .co-footer{padding:16px 20px;border-top:1px solid var(--line);background:#fafafa;flex-shrink:0}
+  .co-summary{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+  .co-sum-line{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+  .co-sum-line.total{font-size:16px;font-weight:600;color:var(--text);padding-top:8px;border-top:1px solid var(--line);margin-top:4px}
+  .co-place-btn{width:100%;height:44px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:opacity .15s}
+  .co-place-btn:hover{opacity:.88}
+  .co-place-btn:disabled{background:var(--faint);cursor:default;opacity:1}
+  .co-status-list{padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+  .co-status-row{display:flex;align-items:center;gap:10px;font-size:13px}
+  .co-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--line2);transition:background .3s}
+  .co-dot.spinning{background:#f5a623;animation:cospin 1s infinite}
+  .co-dot.done{background:var(--accent)}
+  @keyframes cospin{0%,100%{opacity:1}50%{opacity:.25}}
+  .co-status-label{flex:1}
+  .co-status-sub{font-size:11px;color:var(--muted)}
+  .co-done-banner{margin:0 20px 16px;padding:12px 14px;background:var(--accent-bg);border:1px solid #b2dfd0;border-radius:10px;font-size:13px;color:var(--accent-tx);line-height:1.5}
+
+  /* SETTINGS MODAL */
+  .stab{flex:1;padding:11px 0;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;transition:all .15s}
+  .stab:hover{color:var(--text)}
+  .stab.active{color:var(--accent-tx);border-bottom-color:var(--accent)}
+  .sfield-group{margin-bottom:14px}
+  .sfield-label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+  .sfield-input{width:100%;padding:9px 12px;border:1px solid var(--line2);border-radius:8px;font-size:13px;font-family:inherit;color:var(--text);background:#fff;outline:none;transition:border-color .15s}
+  .sfield-input:focus{border-color:var(--accent)}
+  .s-save-btn{height:38px;padding:0 22px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:opacity .15s}
+  .s-save-btn:hover{opacity:.88}
+  .s-saved-msg{font-size:12px;color:var(--accent-tx);margin-top:8px;min-height:18px}
+
+  /* profile hero in settings */
+  .settings-profile-hero{display:flex;flex-direction:column;align-items:center;padding:24px 20px 16px;border-bottom:1px solid var(--line);margin-bottom:20px}
+  .settings-avatar-wrap{position:relative;margin-bottom:12px}
+  .settings-avatar{width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid var(--line2);display:block}
+  .settings-avatar-name{font-size:15px;font-weight:600;color:var(--text)}
+  .settings-avatar-email{font-size:12px;color:var(--muted);margin-top:2px}
+
+  /* ORDER TRACKING MODAL */
+  .order-card{border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden}
+  .order-card-head{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:#fafafa;border-bottom:1px solid var(--line)}
+  .order-store-name{font-size:13px;font-weight:500}
+  .order-ref{font-size:11px;color:var(--faint)}
+  .order-status-pill{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:500}
+  .order-status-pill.placed{background:#E1F5EE;color:#0F6E56}
+  .order-status-pill.shipped{background:#FFF4E5;color:#A8651A}
+  .order-status-pill.delivered{background:#E9F7EE;color:#1D6A40}
+  .order-items-list{padding:10px 14px;display:flex;flex-direction:column;gap:7px}
+  .order-item-row{display:flex;gap:9px;align-items:center}
+  .order-item-img{width:34px;height:34px;border-radius:6px;object-fit:cover;background:#f5f5f5}
+  .order-item-name{flex:1;font-size:12px;color:var(--text);line-height:1.3}
+  .order-item-price{font-size:12px;font-weight:500}
+  .order-track-bar{padding:10px 14px 12px;border-top:1px solid var(--line)}
+  .order-track-steps{display:flex;align-items:center}
+  .track-step{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1}
+  .track-dot{width:10px;height:10px;border-radius:50%;background:var(--line2);flex-shrink:0}
+  .track-dot.done{background:var(--accent)}
+  .track-dot.active{background:#f5a623;box-shadow:0 0 0 3px #FFF4E5}
+  .track-line{flex:1;height:2px;background:var(--line2)}
+  .track-line.done{background:var(--accent)}
+  .track-label{font-size:10px;color:var(--faint);text-align:center}
+  .track-label.done{color:var(--accent-tx)}
+  .track-label.active{color:#A8651A;font-weight:500}
+  .order-eta{font-size:11px;color:var(--muted);margin-top:8px}
+  .order-eta strong{color:var(--text)}
+  .orders-empty{text-align:center;color:var(--faint);font-size:13px;padding:40px 0;line-height:1.6}
+
   @media(max-width:1200px){.basket{width:320px}}
   @media(max-width:980px){.sidebar{display:none}.cards{grid-template-columns:1fr}}
 </style>
@@ -234,27 +304,34 @@
     <div class="brand-sub">by MonkiBuziness 22 BV</div>
   </div>
   <button class="new-chat" onclick="newChat()">＋ New search</button>
-  <div class="history-label">Recent</div>
-  <div class="history" id="history"></div>
-  <div class="ship-to">
-    <span class="ship-to-label">📍 Ship to</span>
-    <select class="ship-to-select" id="shipToSelect" onchange="onShipToChange(this.value)">
-      <option value="NL">🇳🇱 Netherlands</option>
-      <option value="BE">🇧🇪 Belgium</option>
-      <option value="DE">🇩🇪 Germany</option>
-      <option value="FR">🇫🇷 France</option>
-      <option value="ES">🇪🇸 Spain</option>
-      <option value="IT">🇮🇹 Italy</option>
-      <option value="GB">🇬🇧 United Kingdom</option>
-      <option value="US">🇺🇸 United States</option>
-    </select>
-  </div>
-  <div class="sidebar-foot">
-    <img class="user-avatar" src="/pfp.png" alt="avatar" onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=MonkiUser'"/>
-    <div class="user-info">
-      <div class="user-name">Kaysiia T.</div>
-      <div class="user-plan">Free plan · €4.99/mo Pro</div>
+
+  <!-- Split: chats top, orders bottom -->
+  <div class="sidebar-section" style="flex:1;min-height:0;display:flex;flex-direction:column">
+
+    <div class="sidebar-section-chats">
+      <div class="history-label">Recent chats</div>
+      <div class="history" id="history"></div>
     </div>
+
+    <div style="border-top:1px solid var(--line);flex-shrink:0"></div>
+
+    <div class="sidebar-section-orders">
+      <div class="orders-label">
+        <span>📦 My orders</span>
+        <button onclick="openOrdersModal()">View all →</button>
+      </div>
+      <div id="sidebarOrdersList"></div>
+    </div>
+
+  </div>
+
+  <div class="sidebar-foot" onclick="openSettings()" title="Account settings">
+    <img class="user-avatar" id="sidebarAvatar" src="/pfp.png" alt="avatar"
+         onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=MonkiUser'"/>
+    <div class="user-info">
+      <div class="user-name" id="sidebarUsername">Kaysiia T.</div>
+    </div>
+    <span style="font-size:16px;color:var(--faint);margin-left:auto">⚙</span>
   </div>
 </aside>
 
@@ -272,7 +349,6 @@
         <span class="chip" onclick="quick('off-white linen curtains 140x260cm, max €60 per pair')">🪟 curtains</span>
         <span class="chip" onclick="quick('matte ceramic plant pot, around 20cm, under €25')">🪴 plant pot</span>
       </div>
-      <!-- Attached-image preview (appears once the user picks a file) -->
       <div class="attach-preview" id="attachPreview">
         <img id="attachImg" alt="reference"/>
         <div class="text">
@@ -302,12 +378,12 @@
     <div class="sumline"><span>Subtotal</span><span id="subtotal">€0.00</span></div>
     <div class="sumline"><span id="delLabel">Delivery</span><span id="delTotal">€0.00</span></div>
     <div class="sumline total"><span>Total</span><span id="grandTotal">€0.00</span></div>
-    <button class="checkout">Batch checkout — 1 click →</button>
+    <button class="checkout" onclick="openCheckoutModal()">Checkout →</button>
     <div class="savings" id="savings"></div>
   </div>
 </aside>
 
-<!-- Floating compare bar (appears when 2+ products selected) -->
+<!-- Compare bar -->
 <div class="compare-bar" id="compareBar">
   <span><span class="compare-bar-count" id="compareCount">0</span> selected</span>
   <button class="compare-bar-btn" onclick="openCompareModal()">Compare side-by-side</button>
@@ -325,501 +401,837 @@
   </div>
 </div>
 
+<!-- Checkout modal -->
+<div class="modal-overlay" id="checkoutModal" onclick="if(event.target===this)closeCheckoutModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head">
+      <h2 id="checkoutModalTitle">Review &amp; checkout</h2>
+      <button class="modal-close" onclick="closeCheckoutModal()">×</button>
+    </div>
+    <div class="modal-body" id="checkoutModalBody" style="padding:0;display:flex;flex-direction:column;overflow:hidden"></div>
+  </div>
+</div>
+
+<!-- Orders tracking modal -->
+<div class="modal-overlay" id="ordersModal" onclick="if(event.target===this)closeOrdersModal()">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-head">
+      <h2>📦 My orders &amp; deliveries</h2>
+      <button class="modal-close" onclick="closeOrdersModal()">×</button>
+    </div>
+    <div class="modal-body" id="ordersModalBody"></div>
+  </div>
+</div>
+
+<!-- Settings modal — Profile + Billing only, no Orders tab -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-head">
+      <h2>Account settings</h2>
+      <button class="modal-close" onclick="closeSettings()">×</button>
+    </div>
+    <div style="display:flex;border-bottom:1px solid var(--line);flex-shrink:0">
+      <button class="stab active" id="stab-profile" onclick="switchSettingsTab('profile')">Profile</button>
+      <button class="stab" id="stab-billing" onclick="switchSettingsTab('billing')">Billing</button>
+    </div>
+    <!-- Profile tab -->
+    <div id="spanel-profile" style="overflow-y:auto;flex:1;padding:0 20px 20px">
+      <!-- Big avatar hero -->
+      <div class="settings-profile-hero">
+        <div class="settings-avatar-wrap">
+          <img class="settings-avatar" id="settingsAvatar" src="/pfp.png" alt="avatar"
+               onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=MonkiUser'"/>
+        </div>
+        <div class="settings-avatar-name" id="settingsAvatarName">Kaysiia T.</div>
+        <div class="settings-avatar-email" id="settingsAvatarEmail"></div>
+      </div>
+      <div class="sfield-group">
+        <label class="sfield-label">Username</label>
+        <input class="sfield-input" id="sf-username" type="text" placeholder="Your display name"/>
+      </div>
+      <div class="sfield-group">
+        <label class="sfield-label">Email address</label>
+        <input class="sfield-input" id="sf-email" type="email" placeholder="you@example.com"/>
+      </div>
+      <div class="sfield-group">
+        <label class="sfield-label">Phone number</label>
+        <input class="sfield-input" id="sf-phone" type="tel" placeholder="+31 6 00 000 000"/>
+      </div>
+      <div class="sfield-group">
+        <label class="sfield-label">Country (ship-to)</label>
+        <select class="sfield-input" id="sf-country">
+          <option value="NL">🇳🇱 Netherlands</option>
+          <option value="BE">🇧🇪 Belgium</option>
+          <option value="DE">🇩🇪 Germany</option>
+          <option value="FR">🇫🇷 France</option>
+          <option value="ES">🇪🇸 Spain</option>
+          <option value="IT">🇮🇹 Italy</option>
+          <option value="GB">🇬🇧 United Kingdom</option>
+          <option value="US">🇺🇸 United States</option>
+        </select>
+      </div>
+      <div class="sfield-group">
+        <label class="sfield-label">Delivery address</label>
+        <input class="sfield-input" id="sf-address" type="text" placeholder="Street and number"/>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input class="sfield-input" id="sf-city" type="text" placeholder="City" style="flex:1"/>
+          <input class="sfield-input" id="sf-postal" type="text" placeholder="Postcode" style="width:110px"/>
+        </div>
+      </div>
+      <button class="s-save-btn" onclick="saveProfile()">Save changes</button>
+      <div class="s-saved-msg" id="profileSavedMsg"></div>
+    </div>
+    <!-- Billing tab -->
+    <div id="spanel-billing" style="display:none;overflow-y:auto;flex:1;padding:20px">
+      <div class="sfield-group">
+        <label class="sfield-label">Cardholder name</label>
+        <input class="sfield-input" id="sf-cardname" type="text" placeholder="Name on card"/>
+      </div>
+      <div class="sfield-group">
+        <label class="sfield-label">Card number</label>
+        <input class="sfield-input" id="sf-cardnum" type="text" placeholder="•••• •••• •••• ••••" maxlength="19" oninput="fmtCard(this)"/>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="sfield-group" style="flex:1">
+          <label class="sfield-label">Expiry</label>
+          <input class="sfield-input" id="sf-expiry" type="text" placeholder="MM / YY" maxlength="7" oninput="fmtExpiry(this)"/>
+        </div>
+        <div class="sfield-group" style="width:100px">
+          <label class="sfield-label">CVV</label>
+          <input class="sfield-input" id="sf-cvv" type="password" placeholder="•••" maxlength="4"/>
+        </div>
+      </div>
+      <div class="sfield-group">
+        <label class="sfield-label">Billing address</label>
+        <input class="sfield-input" id="sf-billaddr" type="text" placeholder="Same as delivery? Leave blank"/>
+      </div>
+      <button class="s-save-btn" onclick="saveBilling()">Save billing info</button>
+      <div class="s-saved-msg" id="billingSavedMsg"></div>
+      <p style="font-size:11px;color:var(--faint);margin-top:12px;line-height:1.5">Card details are stored locally in this demo only — not transmitted anywhere.</p>
+    </div>
+  </div>
+</div>
+
 <script>
-/* ============================================================================
- * MonkiBasket frontend state.
- *
- * State (persisted to localStorage so refresh doesn't wipe demo work):
- *   chats         — [{id, title, messages[]}]
- *   activeChat    — id of currently-open chat
- *   basketMap     — { productId: {product, qty} }  (Teodora's multi-product
- *                   structure: items are keyed by id and carry a quantity)
- *   resultsCache  — { productId: product }
- *                   so add-to-basket works after refresh (chat messages
- *                   reference these)
- *   comparing     — Set of product ids selected for side-by-side comparison
- * ========================================================================== */
+/* ============================================================
+   STATE
+   ============================================================ */
+const STORAGE_KEY='monki_state_v6';
 
-const STORAGE_KEY = 'monki_state_v4';
-const USER_NAME   = 'Kaysiia T.';
-const USER_AVATAR = '/pfp.png';
+function defaultProfile(){
+  return{username:'Kaysiia T.',email:'',phone:'',address:'',city:'',postal:'',cardname:'',cardnum:'',expiry:''};
+}
 
-let chats          = [];
-let activeChat     = null;
-let basketMap      = {};
-let resultsCache   = {};
-let comparing      = new Set();
-let shipTo         = 'NL';   // ISO-2 country code, persisted in localStorage
-let attachedImage  = null;   // { dataUrl, mime } when user picks an image. Cleared after send.
+let chats=[],activeChat=null,basketMap={},resultsCache={};
+let comparing=new Set(),shipTo='NL',attachedImage=null;
+let userProfile=defaultProfile(),orderHistory=[],checkoutSelections={};
 
-/* ---------- localStorage persistence ---------- */
+/* ============================================================
+   PERSISTENCE
+   ============================================================ */
 function saveState(){
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      chats, activeChat, basketMap, resultsCache,
-      comparing: [...comparing],
-      shipTo
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({
+      chats,activeChat,basketMap,resultsCache,
+      comparing:[...comparing],shipTo,userProfile,orderHistory
     }));
-  }catch(e){ console.warn('Save failed:', e); }
+  }catch(e){console.warn('Save failed:',e);}
 }
 function loadState(){
   try{
-    const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if(!s) return false;
-    chats        = s.chats        || [];
-    activeChat   = s.activeChat   || null;
-    basketMap    = s.basketMap    || {};
-    resultsCache = s.resultsCache || {};
-    comparing    = new Set(s.comparing || []);
-    shipTo       = s.shipTo       || 'NL';
+    const s=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');
+    if(!s)return false;
+    chats=s.chats||[];activeChat=s.activeChat||null;
+    basketMap=s.basketMap||{};resultsCache=s.resultsCache||{};
+    comparing=new Set(s.comparing||[]);shipTo=s.shipTo||'NL';
+    userProfile=s.userProfile||defaultProfile();orderHistory=s.orderHistory||[];
     return true;
-  }catch(e){ console.warn('Load failed:', e); return false; }
+  }catch(e){console.warn('Load failed:',e);return false;}
 }
 
-/* ---------- Ship-to country ---------- */
-function onShipToChange(value){
-  shipTo = value;
-  saveState();
-  // No re-search — the user will trigger a new one. Delivery costs on existing
-  // results stay as they were (they reflect the country in force at search time).
+/* ============================================================
+   SIDEBAR ORDERS LIST
+   ============================================================ */
+function renderSidebarOrders(){
+  const el=document.getElementById('sidebarOrdersList');
+  if(!orderHistory.length){
+    el.innerHTML='<div class="order-sidebar-empty">No orders yet.</div>';
+    return;
+  }
+  el.innerHTML=orderHistory.slice().reverse().slice(0,5).map(order=>{
+    const dotCls=order.status==='Delivered'?'delivered':order.status==='Shipped'||order.status==='Out for delivery'?'shipped':'placed';
+    return `<div class="order-sidebar-item" onclick="openOrdersModal()">
+      <div class="order-sidebar-dot ${dotCls}"></div>
+      <div class="order-sidebar-info">
+        <div class="order-sidebar-store">${escapeHtml(order.store)}</div>
+        <div class="order-sidebar-eta">${escapeHtml(order.status)} · ${escapeHtml(order.eta)}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-/* ---------- Attached reference image ---------- */
-/**
- * Downscale an image client-side before sending it to the server. Reasons:
- *   - vision API charges per token, and image tokens scale with resolution
- *   - base64 payloads of 5+ MB phone photos hurt request latency
- *   - the model doesn't gain useful detail above ~1024px for aesthetic
- *     matching of an interior scene
- *
- * Uses the browser canvas — no external libs needed.
- *
- * @return Promise<{ dataUrl: string, mime: string }>
- */
-function downscaleImage(file, maxDim = 1024) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = reject;
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const w = Math.round(img.width  * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        // JPEG @ 85% is a good size/quality balance for photos.
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-        resolve({ dataUrl, mime: 'image/jpeg' });
+/* ============================================================
+   ORDERS TRACKING MODAL
+   ============================================================ */
+function openOrdersModal(){
+  const body=document.getElementById('ordersModalBody');
+  if(!orderHistory.length){
+    body.innerHTML='<div class="orders-empty" style="padding:40px 0;text-align:center;color:var(--faint);font-size:13px">No orders yet.<br>Place your first order from the basket!</div>';
+    document.getElementById('ordersModal').classList.add('visible');
+    return;
+  }
+  const STEPS=['Order placed','Processing','Shipped','Out for delivery','Delivered'];
+  body.innerHTML=orderHistory.slice().reverse().map(order=>{
+    const stepIdx=STEPS.indexOf(order.status);
+    const dotsHtml=STEPS.map((step,i)=>{
+      const cls=i<stepIdx?'done':i===stepIdx?'active':'';
+      const lblCls=i<stepIdx?'done':i===stepIdx?'active':'';
+      const lineHtml=i<STEPS.length-1?`<div class="track-line ${i<stepIdx?'done':''}"></div>`:'';
+      return `<div class="track-step"><div class="track-dot ${cls}"></div><div class="track-label ${lblCls}">${step}</div></div>${lineHtml}`;
+    }).join('');
+    const itemsHtml=order.items.map(it=>`
+      <div class="order-item-row">
+        <img class="order-item-img" src="${escapeAttr(it.img)}" alt="" onerror="this.style.opacity=.3"/>
+        <span class="order-item-name">${escapeHtml(it.name)} ×${it.qty}</span>
+        <span class="order-item-price">€${(it.price*it.qty).toFixed(2)}</span>
+      </div>`).join('');
+    const statusClass=order.status==='Delivered'?'delivered':order.status==='Shipped'||order.status==='Out for delivery'?'shipped':'placed';
+    return `<div class="order-card">
+      <div class="order-card-head">
+        <div><div class="order-store-name">${escapeHtml(order.store)}</div><div class="order-ref">${escapeHtml(order.ref)}</div></div>
+        <span class="order-status-pill ${statusClass}">${escapeHtml(order.status)}</span>
+      </div>
+      <div class="order-items-list">${itemsHtml}</div>
+      <div class="order-track-bar">
+        <div class="order-track-steps">${dotsHtml}</div>
+        <div class="order-eta">Estimated delivery: <strong>${escapeHtml(order.eta)}</strong></div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('ordersModal').classList.add('visible');
+}
+function closeOrdersModal(){document.getElementById('ordersModal').classList.remove('visible');}
+
+/* ship-to is now set via Account Settings → Country */
+
+/* ============================================================
+   IMAGE ATTACH
+   ============================================================ */
+function downscaleImage(file,maxDim=1024){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=reject;
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=reject;
+      img.onload=()=>{
+        const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
+        const w=Math.round(img.width*scale),h=Math.round(img.height*scale);
+        const canvas=document.createElement('canvas');
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve({dataUrl:canvas.toDataURL('image/jpeg',0.85),mime:'image/jpeg'});
       };
-      img.src = reader.result;
+      img.src=reader.result;
     };
     reader.readAsDataURL(file);
   });
 }
-
 async function onFilePicked(event){
-  const file = event.target.files && event.target.files[0];
-  if(!file) return;
-  if(!file.type.startsWith('image/')){
-    alert('Please pick an image file.');
-    return;
-  }
+  const file=event.target.files&&event.target.files[0];
+  if(!file)return;
+  if(!file.type.startsWith('image/')){alert('Please pick an image file.');return;}
   try{
-    attachedImage = await downscaleImage(file);
-    const preview = document.getElementById('attachPreview');
-    document.getElementById('attachImg').src = attachedImage.dataUrl;
-    preview.classList.add('visible');
+    attachedImage=await downscaleImage(file);
+    document.getElementById('attachImg').src=attachedImage.dataUrl;
+    document.getElementById('attachPreview').classList.add('visible');
     document.getElementById('attachBtn').classList.add('active');
-  }catch(e){
-    console.error('downscale failed', e);
-    alert('Could not read that image. Try another one.');
-  }
-  // Clear the input value so the same file can be re-picked after clearing.
-  event.target.value = '';
+  }catch(e){console.error('downscale failed',e);alert('Could not read that image.');}
+  event.target.value='';
 }
-
 function clearAttachedImage(){
-  attachedImage = null;
+  attachedImage=null;
   document.getElementById('attachPreview').classList.remove('visible');
   document.getElementById('attachBtn').classList.remove('active');
-  document.getElementById('attachImg').src = '';
+  document.getElementById('attachImg').src='';
 }
 
-function uid(){ return 'c' + Date.now() + Math.floor(Math.random()*1000); }
-
-/* ---------- Chat thread management ---------- */
+/* ============================================================
+   CHAT
+   ============================================================ */
+function uid(){return 'c'+Date.now()+Math.floor(Math.random()*1000);}
 function newChat(){
-  const c = {id:uid(), title:'New search', messages:[]};
-  chats.unshift(c);
-  activeChat = c.id;
-  renderHistory(); renderThread();
-  document.getElementById('chatTitle').textContent = 'New search';
-  document.getElementById('chips').style.display = 'flex';
+  const c={id:uid(),title:'New search',messages:[]};
+  chats.unshift(c);activeChat=c.id;
+  renderHistory();renderThread();
+  document.getElementById('chatTitle').textContent='New search';
+  document.getElementById('chips').style.display='flex';
   saveState();
 }
 function renderHistory(){
-  document.getElementById('history').innerHTML = chats.map(c => `
+  document.getElementById('history').innerHTML=chats.map(c=>`
     <div class="history-item ${c.id===activeChat?'active':''}" onclick="openChat('${c.id}')">
       <span class="history-item-title">${escapeHtml(c.title)}</span>
-      <button class="history-delete" onclick="deleteChat(event,'${c.id}')" title="Delete chat">×</button>
+      <button class="history-delete" onclick="deleteChat(event,'${c.id}')" title="Delete">×</button>
     </div>`).join('');
 }
-function deleteChat(e, id){
+function deleteChat(e,id){
   e.stopPropagation();
-  chats = chats.filter(c => c.id !== id);
-  if(activeChat === id){
-    activeChat = chats.length ? chats[0].id : null;
-    if(!activeChat) newChat(); else openChat(activeChat);
-  } else {
-    renderHistory();
-  }
+  chats=chats.filter(c=>c.id!==id);
+  if(activeChat===id){activeChat=chats.length?chats[0].id:null;if(!activeChat)newChat();else openChat(activeChat);}
+  else renderHistory();
   saveState();
 }
 function openChat(id){
-  activeChat = id;
-  renderHistory(); renderThread();
-  const c = chats.find(x => x.id === id);
-  if(c){
-    document.getElementById('chatTitle').textContent = c.title;
-    document.getElementById('chips').style.display = c.messages.length ? 'none' : 'flex';
-  }
+  activeChat=id;renderHistory();renderThread();
+  const c=chats.find(x=>x.id===id);
+  if(c){document.getElementById('chatTitle').textContent=c.title;document.getElementById('chips').style.display=c.messages.length?'none':'flex';}
   saveState();
 }
-function quick(t){ document.getElementById('input').value = t; sendMessage(); }
-function onKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } }
-function autoGrow(el){ el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,120)+'px'; }
-
-/* ---------- Sending a message + receiving results ---------- */
+function quick(t){document.getElementById('input').value=t;sendMessage();}
+function onKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}
+function autoGrow(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
 function sendMessage(){
-  const input = document.getElementById('input');
-  const text  = input.value.trim();
-  // Accept either text-only or image-only (or both). With image-only, the
-  // backend defaults to "find something that matches this image".
-  if(!text && !attachedImage) return;
-  if(!activeChat) newChat();
-
-  const c = chats.find(x => x.id === activeChat);
-  if(c.messages.length === 0){
-    c.title = text ? (text.length > 34 ? text.slice(0,34)+'…' : text) : '📷 Reference search';
-    document.getElementById('chatTitle').textContent = c.title;
-    renderHistory();
+  const input=document.getElementById('input');
+  const text=input.value.trim();
+  if(!text&&!attachedImage)return;
+  if(!activeChat)newChat();
+  const c=chats.find(x=>x.id===activeChat);
+  if(c.messages.length===0){
+    c.title=text?(text.length>34?text.slice(0,34)+'…':text):'📷 Reference search';
+    document.getElementById('chatTitle').textContent=c.title;renderHistory();
   }
-  // Stash the image (if any) on the user message so the bubble can show it.
-  const userMsg = {role:'user', text};
-  if(attachedImage) userMsg.imageDataUrl = attachedImage.dataUrl;
+  const userMsg={role:'user',text};
+  if(attachedImage)userMsg.imageDataUrl=attachedImage.dataUrl;
   c.messages.push(userMsg);
-  input.value = ''; input.style.height = 'auto';
-  document.getElementById('chips').style.display = 'none';
+  input.value='';input.style.height='auto';
+  document.getElementById('chips').style.display='none';
+  // Clear attach preview immediately so it doesn't linger after send
+  const imageForRequest=attachedImage?attachedImage.dataUrl:null;
+  clearAttachedImage();
   renderThread();
-
-  c.messages.push({role:'ai', typing:true});
+  c.messages.push({role:'ai',typing:true});
   renderThread();
-
-  const historyMsgs = c.messages.slice(0,-1)
-    .filter(m => !m.typing)
-    .map(m => ({role: m.role==='user'?'user':'assistant', content: m.text || ''}));
-
-  const body = {message: text, history: historyMsgs, ship_to: shipTo};
-  if(attachedImage){
-    body.image_data_url = attachedImage.dataUrl;
-  }
-
-  fetch('/chat', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body)
-  }).then(r => r.json()).then(data => {
-    const ai = c.messages[c.messages.length-1];
-    ai.typing = false;
-    ai.text   = data.intro;
-    if(data.type === 'results' && data.results){
-      ai.results = data.results;
-      ai.scene   = data.scene;   // for context, surfaced in card labels
-      data.results.forEach(p => resultsCache[p.id] = p);
-    }
-    // Reset the attach state — image was consumed by this message.
-    clearAttachedImage();
-    renderThread();
-    saveState();
-  }).catch(err => {
-    const ai = c.messages[c.messages.length-1];
-    ai.typing = false;
-    ai.text   = "Network error: " + err.message;
-    renderThread();
-    saveState();
-  });
+  const historyMsgs=c.messages.slice(0,-1).filter(m=>!m.typing).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text||''}));
+  const body={message:text,history:historyMsgs,ship_to:shipTo};
+  if(imageForRequest)body.image_data_url=imageForRequest;
+  fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(data=>{
+      const ai=c.messages[c.messages.length-1];
+      ai.typing=false;ai.text=data.intro;
+      if(data.type==='results'&&data.results){
+        // Namespace product IDs with a unique message ID so r0/r1 from
+        // different searches never collide in basketMap or resultsCache
+        const msgId='m'+Date.now();
+        data.results=data.results.map(p=>({...p,id:msgId+'_'+p.id}));
+        ai.results=data.results;ai.scene=data.scene;
+        data.results.forEach(p=>resultsCache[p.id]=p);
+        if(data.category){
+          const newTitle=data.category.length>34?data.category.slice(0,34)+'…':data.category;
+          c.title=newTitle;
+          document.getElementById('chatTitle').textContent=newTitle;
+          renderHistory();
+        }
+      }
+      renderThread();saveState();
+    }).catch(err=>{
+      const ai=c.messages[c.messages.length-1];
+      ai.typing=false;ai.text='Network error: '+err.message;
+      renderThread();saveState();
+    });
 }
 
-/* ---------- Rendering ---------- */
+/* ============================================================
+   RENDERING
+   ============================================================ */
 function userAvatarHTML(){
-  return `<div class="msg-avatar user"><img src="${USER_AVATAR}" alt="${escapeHtml(USER_NAME)}" onerror="this.parentElement.innerHTML='${USER_NAME.slice(0,2)}'"/></div>`;
+  const name=userProfile.username||'K';
+  return `<div class="msg-avatar user"><img src="/pfp.png" alt="${escapeHtml(name)}" onerror="this.parentElement.innerHTML='${escapeHtml(name.slice(0,2))}'"/></div>`;
 }
-
 function renderThread(){
-  const inner = document.getElementById('threadInner');
-  const c = chats.find(x => x.id === activeChat);
-  if(!c){ inner.innerHTML = ''; return; }
-  inner.innerHTML = c.messages.map(m => {
-    if(m.role === 'user'){
-      const imgHtml = m.imageDataUrl
-        ? `<img class="msg-img-attached" src="${escapeAttr(m.imageDataUrl)}" alt="reference"/>`
-        : '';
-      const textHtml = m.text ? `<div class="msg-text">${escapeHtml(m.text)}</div>` : '';
-      return `<div class="msg">${userAvatarHTML()}<div class="msg-body"><div class="msg-role">${escapeHtml(USER_NAME)}</div>${textHtml}${imgHtml}</div></div>`;
-    }
-    const body = m.typing
-      ? `<div class="typing"><span></span><span></span><span></span></div>`
-      : `<div class="msg-text">${escapeHtml(m.text||'')}</div>` + (m.results ? renderCards(m.results) : '');
-    return `<div class="msg"><div class="msg-avatar ai">🐵</div><div class="msg-body"><div class="msg-role">MonkiBasket</div>${body}</div></div>`;
-  }).join('');
-  document.getElementById('thread').scrollTop = 99999;
-}
-
-/**
- * Render a row of product cards: 2-col grid, big square photos, compare
- * checkbox top-right, qty controls swap in once added to basket.
- */
-function renderCards(results){
-  let html = '<div class="cards">';
-  results.forEach((p, i) => {
-    const best   = i === 0;
-    const qty    = basketMap[p.id] ? basketMap[p.id].qty : 0;
-    const inB    = qty > 0;
-    const inCmp  = comparing.has(p.id);
-    const rating = p.rating ? `<span class="card-rating">⭐ ${p.rating}${p.reviews?' ('+p.reviews+')':''}</span>` : '';
-    // Delivery line: estimate only, NO fake "= total" math. The total only
-    // appears in the basket where the line label says "(N stores, est.)".
-    const estTip = p.cross_border
-      ? `Cross-border delivery to ${shipTo} — estimate; verify at checkout.`
-      : `Typical ${shipTo} delivery for this store — verify at checkout.`;
-    const deliveryHtml = p.delivery > 0
-      ? `+ €${p.delivery.toFixed(2)} delivery${p.delivery_estimated ? ' <span class="delivery-est" title="'+estTip+'">est.</span>' : ''}`
-      : `Free delivery${p.delivery_estimated ? ' <span class="delivery-est" title="'+estTip+'">est.</span>' : ''}`;
-    // VAT-risk flag: shown when the listing crosses the EU customs border,
-    // because the buyer may owe import VAT / duties at delivery.
-    const vatFlag = p.vat_risk ? `<span class="vat-flag" title="May incur import VAT / customs duties at delivery.">⚠ VAT risk</span>` : '';
-    const fitPct = Math.max(0, Math.min(100, p.match || 0));
-
-    html += `
-      <div class="card ${best?'best':''} ${inCmp?'comparing':''}">
-        <div class="card-photo-wrap">
-          <img class="card-photo" src="${escapeAttr(p.img)}" alt="${escapeAttr(p.name)}" loading="lazy" onerror="this.style.opacity=.3"/>
-          ${best ? '<span class="rank-badge">✓ best match</span>' : ''}
-          <label class="compare-check ${inCmp?'on':''}" title="Add to side-by-side comparison">
-            <input type="checkbox" ${inCmp?'checked':''} onchange="toggleCompare('${p.id}')"/>
-            <span>compare</span>
-          </label>
-        </div>
-        <div class="card-body">
-          <div class="card-title"><a href="${escapeAttr(p.url)}" target="_blank" rel="noopener">${escapeHtml(p.name)}</a></div>
-          <div class="card-store">
-            <span>${escapeHtml(p.store)}</span>
-            ${rating}
-            ${vatFlag}
-          </div>
-          <div class="card-prices">
-            <div class="card-price-main">€${p.price.toFixed(2)}</div>
-            <div class="card-price-sub">${deliveryHtml}</div>
-          </div>
-          <div class="card-fit" title="${p.aesthetic_scored ? 'Scored by comparing this product photo to your reference photo.' : 'Scored on how well the title matches your stated criteria.'}">
-            ${p.aesthetic_scored ? '✨ aesthetic' : 'fit'}
-            <div class="card-fit-bar"><div class="card-fit-fill" style="width:${fitPct}%"></div></div>
-            ${fitPct}%
-          </div>
-          <div class="card-actions">
-            <button class="btn btn-add ${inB?'added':''}" id="btn-${p.id}" onclick="addToBasket('${p.id}')" style="${inB?'display:none':''}">
-              + basket
-            </button>
-            <div class="qty-wrap ${inB?'visible':''}" id="qty-${p.id}">
-              <button class="qty-btn" onclick="changeQty('${p.id}',-1)">−</button>
-              <span class="qty-num" id="qnum-${p.id}">${qty}</span>
-              <button class="qty-btn" onclick="changeQty('${p.id}',1)">+</button>
-            </div>
-            <a class="btn btn-view" href="${escapeAttr(p.url)}" target="_blank" rel="noopener" title="Open on ${escapeAttr(p.store)}">↗</a>
-          </div>
+  const inner=document.getElementById('threadInner');
+  const c=chats.find(x=>x.id===activeChat);
+  if(!c){inner.innerHTML='';return;}
+  const displayName=userProfile.username||'Kaysiia T.';
+  inner.innerHTML=c.messages.map(m=>{
+    if(m.role==='user'){
+      const imgHtml=m.imageDataUrl?`<img class="msg-img-attached" src="${escapeAttr(m.imageDataUrl)}" alt="reference"/>`:'';
+      const textHtml=m.text?`<div class="user-bubble">${escapeHtml(m.text)}</div>`:'';
+      return `<div class="msg user-msg">
+        <div class="msg-avatar user-av"><img src="/pfp.png" alt="${escapeHtml(displayName)}" onerror="this.parentElement.textContent='${escapeHtml(displayName.slice(0,2))}'"/></div>
+        <div class="msg-body">
+          <div class="msg-role">${escapeHtml(displayName)}</div>
+          ${textHtml}${imgHtml}
         </div>
       </div>`;
-  });
-  return html + '</div>';
+    }
+    const body=m.typing
+      ?`<div class="ai-bubble"><div class="typing"><span></span><span></span><span></span></div></div>`
+      :`<div class="ai-bubble">${escapeHtml(m.text||'')}</div>`+(m.results?renderCards(m.results):'');
+    return `<div class="msg"><div class="msg-avatar ai">🐵</div><div class="msg-body"><div class="msg-role">MonkiBasket</div>${body}</div></div>`;
+  }).join('');
+  document.getElementById('thread').scrollTop=99999;
 }
-
-/* ---------- Basket (multi-product with qty) ---------- */
-function addToBasket(id){
-  const p = resultsCache[id];
-  if(!p) return;
-  if(!basketMap[id]) basketMap[id] = {product:p, qty:0};
-  basketMap[id].qty++;
-  updateCardControls(id);
-  renderBasket();
-  saveState();
-}
-function changeQty(id, delta){
-  if(!basketMap[id]) return;
-  basketMap[id].qty = Math.max(0, basketMap[id].qty + delta);
-  if(basketMap[id].qty === 0) delete basketMap[id];
-  updateCardControls(id);
-  renderBasket();
-  saveState();
-}
-function removeFromBasket(id){
-  delete basketMap[id];
-  updateCardControls(id);
-  renderBasket();
-  saveState();
-}
-/** Swap add-button ↔ qty-controls on a single card without full re-render. */
-function updateCardControls(id){
-  const qty   = basketMap[id] ? basketMap[id].qty : 0;
-  const btn   = document.getElementById('btn-' + id);
-  const qwrap = document.getElementById('qty-' + id);
-  const qnum  = document.getElementById('qnum-' + id);
-  if(btn)   btn.style.display = qty > 0 ? 'none' : '';
-  if(qwrap) qwrap.className = 'qty-wrap' + (qty > 0 ? ' visible' : '');
-  if(qnum)  qnum.textContent = qty;
-}
-
-function renderBasket(){
-  const totalItems = Object.values(basketMap).reduce((s, b) => s + b.qty, 0);
-  document.getElementById('basketCount').textContent = totalItems;
-
-  const body = document.getElementById('basketBody');
-  const foot = document.getElementById('basketFoot');
-  if(totalItems === 0){
-    body.innerHTML = '<div class="basket-empty"><span class="big">🛒</span>Your basket is empty.<br>Search for products and add them here from any store.</div>';
-    foot.style.display = 'none';
-    return;
-  }
-
-  /* Group by store so the user sees what they'd check out from where. */
-  const groups = {};
-  Object.values(basketMap).forEach(({product:p, qty}) => {
-    if(!groups[p.store]) groups[p.store] = [];
-    groups[p.store].push({p, qty});
-  });
-
-  let html = '';
-  Object.entries(groups).forEach(([store, items]) => {
-    const storeQty = items.reduce((s, i) => s + i.qty, 0);
-    html += `<div class="store-group"><div class="store-group-head"><span>${escapeHtml(store)}</span><span>${storeQty} item${storeQty>1?'s':''}</span></div>`;
-    items.forEach(({p, qty}) => {
-      html += `
-        <div class="bitem">
-          <img class="bitem-img" src="${escapeAttr(p.img)}" alt="" onerror="this.style.opacity=.3"/>
-          <div class="bitem-info">
-            <div class="bitem-name">${escapeHtml(p.name)}</div>
-            <div class="bitem-sub">€${p.price.toFixed(2)} each</div>
-            <div class="bitem-price">€${(p.price*qty).toFixed(2)}</div>
-            <div class="bitem-qty">
-              <button class="bqty-btn" onclick="changeQty('${p.id}',-1)">−</button>
-              <span class="bqty-num">${qty}</span>
-              <button class="bqty-btn" onclick="changeQty('${p.id}',1)">+</button>
-            </div>
+function renderCards(results){
+  let html='<div class="cards">';
+  results.forEach((p,i)=>{
+    const best=i===0;
+    const qty=basketMap[p.id]?basketMap[p.id].qty:0;
+    const inB=qty>0,inCmp=comparing.has(p.id);
+    const rating=p.rating?`<span class="card-rating">⭐ ${p.rating}${p.reviews?' ('+p.reviews+')':''}</span>`:'';
+    const estTip=p.cross_border?`Cross-border delivery to ${shipTo} — estimate.`:`Typical ${shipTo} delivery — verify at checkout.`;
+    const deliveryHtml=p.delivery>0
+      ?`+ €${p.delivery.toFixed(2)} delivery${p.delivery_estimated?' <span class="delivery-est" title="'+estTip+'">est.</span>':''}`
+      :`Free delivery${p.delivery_estimated?' <span class="delivery-est" title="'+estTip+'">est.</span>':''}`;
+    const vatFlag=p.vat_risk?`<span class="vat-flag" title="May incur import VAT / customs duties.">⚠ VAT risk</span>`:'';
+    const fitPct=Math.max(0,Math.min(100,p.match||0));
+    html+=`<div class="card ${best?'best':''} ${inCmp?'comparing':''}">
+      <div class="card-photo-wrap">
+        <img class="card-photo" src="${escapeAttr(p.img)}" alt="${escapeAttr(p.name)}" loading="lazy" onerror="this.style.opacity=.3"/>
+        ${best?'<span class="rank-badge">✓ best match</span>':''}
+        <label class="compare-check ${inCmp?'on':''}" title="Compare">
+          <input type="checkbox" ${inCmp?'checked':''} onchange="toggleCompare('${p.id}')"/>
+          <span>compare</span>
+        </label>
+      </div>
+      <div class="card-body">
+        <div class="card-title"><a href="${escapeAttr(p.url)}" target="_blank" rel="noopener">${escapeHtml(p.name)}</a></div>
+        <div class="card-store"><span>${escapeHtml(p.store)}</span>${rating}${vatFlag}</div>
+        <div class="card-prices">
+          <div class="card-price-main">€${p.price.toFixed(2)}</div>
+          <div class="card-price-sub">${deliveryHtml}</div>
+        </div>
+        <div class="card-fit" title="${p.aesthetic_scored?'Aesthetic match score.':'Fit score.'}">
+          ${p.aesthetic_scored?'✨ aesthetic':'fit'}
+          <div class="card-fit-bar"><div class="card-fit-fill" style="width:${fitPct}%"></div></div>
+          ${fitPct}%
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-add ${inB?'added':''}" id="btn-${p.id}" onclick="addToBasket('${p.id}')" style="${inB?'display:none':''}">+ basket</button>
+          <div class="qty-wrap ${inB?'visible':''}" id="qty-${p.id}">
+            <button class="qty-btn" onclick="changeQty('${p.id}',-1)">−</button>
+            <span class="qty-num" id="qnum-${p.id}">${qty}</span>
+            <button class="qty-btn" onclick="changeQty('${p.id}',1)">+</button>
           </div>
-          <button class="bitem-remove" onclick="removeFromBasket('${p.id}')" title="Remove">×</button>
-        </div>`;
+          <a class="btn btn-view" href="${escapeAttr(p.url)}" target="_blank" rel="noopener" title="Open on ${escapeAttr(p.store)}">↗</a>
+        </div>
+      </div>
+    </div>`;
+  });
+  return html+'</div>';
+}
+
+/* ============================================================
+   BASKET
+   ============================================================ */
+function addToBasket(id){
+  const p=resultsCache[id];if(!p)return;
+  if(!basketMap[id])basketMap[id]={product:p,qty:0};
+  basketMap[id].qty++;updateCardControls(id);renderBasket();saveState();
+}
+function changeQty(id,delta){
+  if(!basketMap[id])return;
+  basketMap[id].qty=Math.max(0,basketMap[id].qty+delta);
+  if(basketMap[id].qty===0)delete basketMap[id];
+  updateCardControls(id);renderBasket();saveState();
+}
+function removeFromBasket(id){delete basketMap[id];updateCardControls(id);renderBasket();saveState();}
+function updateCardControls(id){
+  const qty=basketMap[id]?basketMap[id].qty:0;
+  const btn=document.getElementById('btn-'+id);
+  const qwrap=document.getElementById('qty-'+id);
+  const qnum=document.getElementById('qnum-'+id);
+  if(btn)btn.style.display=qty>0?'none':'';
+  if(qwrap)qwrap.className='qty-wrap'+(qty>0?' visible':'');
+  if(qnum)qnum.textContent=qty;
+}
+function renderBasket(){
+  const totalItems=Object.values(basketMap).reduce((s,b)=>s+b.qty,0);
+  document.getElementById('basketCount').textContent=totalItems;
+  const body=document.getElementById('basketBody');
+  const foot=document.getElementById('basketFoot');
+  if(totalItems===0){
+    body.innerHTML='<div class="basket-empty"><span class="big">🛒</span>Your basket is empty.<br>Search for products and add them here from any store.</div>';
+    foot.style.display='none';return;
+  }
+  const groups={};
+  Object.values(basketMap).forEach(({product:p,qty})=>{
+    if(!groups[p.store])groups[p.store]=[];
+    groups[p.store].push({p,qty});
+  });
+  let html='';
+  Object.entries(groups).forEach(([store,items])=>{
+    const storeQty=items.reduce((s,i)=>s+i.qty,0);
+    html+=`<div class="store-group"><div class="store-group-head"><span>${escapeHtml(store)}</span><span>${storeQty} item${storeQty>1?'s':''}</span></div>`;
+    items.forEach(({p,qty})=>{
+      html+=`<div class="bitem">
+        <img class="bitem-img" src="${escapeAttr(p.img)}" alt="" onerror="this.style.opacity=.3"/>
+        <div class="bitem-info">
+          <div class="bitem-name">${escapeHtml(p.name)}</div>
+          <div class="bitem-sub">€${p.price.toFixed(2)} each</div>
+          <div class="bitem-price">€${(p.price*qty).toFixed(2)}</div>
+          <div class="bitem-qty">
+            <button class="bqty-btn" onclick="changeQty('${p.id}',-1)">−</button>
+            <span class="bqty-num">${qty}</span>
+            <button class="bqty-btn" onclick="changeQty('${p.id}',1)">+</button>
+          </div>
+        </div>
+        <button class="bitem-remove" onclick="removeFromBasket('${p.id}')" title="Remove">×</button>
+      </div>`;
     });
-    html += '</div>';
+    html+='</div>';
   });
-  body.innerHTML = html;
-
-  /* Totals: per-store delivery counted ONCE (typical retailer behavior). */
-  let subtotal = 0, delivery = 0;
-  Object.values(groups).forEach(items => {
-    items.forEach(({p, qty}) => subtotal += p.price * qty);
-    delivery += Math.min(...items.map(i => i.p.delivery));
+  body.innerHTML=html;
+  let subtotal=0,delivery=0;
+  Object.values(groups).forEach(items=>{
+    items.forEach(({p,qty})=>subtotal+=p.price*qty);
+    delivery+=Math.min(...items.map(i=>i.p.delivery));
   });
-  const sc = Object.keys(groups).length;
-  document.getElementById('subtotal').textContent = '€' + subtotal.toFixed(2);
-  document.getElementById('delLabel').textContent = 'Delivery (' + sc + ' store' + (sc>1?'s':'') + ', est.)';
-  document.getElementById('delTotal').textContent = '€' + delivery.toFixed(2);
-  document.getElementById('grandTotal').textContent = '€' + (subtotal + delivery).toFixed(2);
-  document.getElementById('savings').textContent = sc>1 ? '✓ ' + totalItems + ' items from ' + sc + ' stores — checked out in one click' : '';
-  foot.style.display = 'block';
+  const sc=Object.keys(groups).length;
+  document.getElementById('subtotal').textContent='€'+subtotal.toFixed(2);
+  document.getElementById('delLabel').textContent='Delivery ('+sc+' store'+(sc>1?'s':'')+', est.)';
+  document.getElementById('delTotal').textContent='€'+delivery.toFixed(2);
+  document.getElementById('grandTotal').textContent='€'+(subtotal+delivery).toFixed(2);
+  document.getElementById('savings').textContent=sc>1?'✓ '+totalItems+' items from '+sc+' stores — checked out in one click':'';
+  foot.style.display='block';
 }
 
-/* ---------- Compare (side-by-side) ---------- */
+/* ============================================================
+   COMPARE
+   ============================================================ */
 function toggleCompare(id){
-  if(comparing.has(id)) comparing.delete(id);
-  else                  comparing.add(id);
-  renderThread();   // re-render so the .comparing border updates
-  renderCompareBar();
-  saveState();
+  if(comparing.has(id))comparing.delete(id);else comparing.add(id);
+  renderThread();renderCompareBar();saveState();
 }
-function clearCompare(){
-  comparing.clear();
-  renderThread();
-  renderCompareBar();
-  saveState();
-}
+function clearCompare(){comparing.clear();renderThread();renderCompareBar();saveState();}
 function renderCompareBar(){
-  const bar   = document.getElementById('compareBar');
-  const count = document.getElementById('compareCount');
-  count.textContent = comparing.size;
-  if(comparing.size >= 2) bar.classList.add('visible');
-  else                    bar.classList.remove('visible');
+  const bar=document.getElementById('compareBar');
+  document.getElementById('compareCount').textContent=comparing.size;
+  if(comparing.size>=2)bar.classList.add('visible');else bar.classList.remove('visible');
 }
 function openCompareModal(){
-  const products = [...comparing].map(id => resultsCache[id]).filter(Boolean);
-  if(products.length < 2) return;
-
-  const cols = products.length;
-  const html = `
-    <div class="compare-grid" style="grid-template-columns:repeat(${cols},1fr)">
-      ${products.map((p, idx) => {
-        const inB = (basketMap[p.id]?.qty || 0) > 0;
-        return `
-        <div class="compare-col ${idx===0?'best':''}">
-          <img class="compare-col-photo" src="${escapeAttr(p.img)}" alt="${escapeAttr(p.name)}" onerror="this.style.opacity=.3"/>
-          <div class="compare-col-body">
-            <div class="compare-col-title">${escapeHtml(p.name)}</div>
-            <div class="compare-row"><span class="lbl">Store</span><span class="val">${escapeHtml(p.store)}</span></div>
-            <div class="compare-row"><span class="lbl">Price</span><span class="val">€${p.price.toFixed(2)}</span></div>
-            <div class="compare-row"><span class="lbl">Delivery${p.delivery_estimated?' (est.)':''}</span><span class="val">€${p.delivery.toFixed(2)}</span></div>
-            <div class="compare-row"><span class="lbl">Total</span><span class="val"><strong>€${p.total.toFixed(2)}</strong></span></div>
-            <div class="compare-row"><span class="lbl">Rating</span><span class="val">${p.rating ? '⭐ '+p.rating : '—'}</span></div>
-            <div class="compare-row"><span class="lbl">Fit score</span><span class="val">${p.match}%</span></div>
-          </div>
-          <div class="compare-col-actions">
-            <button class="btn btn-add ${inB?'added':''}" onclick="addToBasket('${p.id}'); openCompareModal();">
-              ${inB ? '✓ '+basketMap[p.id].qty+' in basket' : '+ basket'}
-            </button>
-            <a class="btn btn-view" href="${escapeAttr(p.url)}" target="_blank" rel="noopener">↗ store</a>
-          </div>
-        </div>`;
-      }).join('')}
+  const products=[...comparing].map(id=>resultsCache[id]).filter(Boolean);
+  if(products.length<2)return;
+  const cols=products.length;
+  const html=`<div class="compare-grid" style="grid-template-columns:repeat(${cols},1fr)">${products.map((p,idx)=>{
+    const inB=(basketMap[p.id]?.qty||0)>0;
+    return `<div class="compare-col ${idx===0?'best':''}">
+      <img class="compare-col-photo" src="${escapeAttr(p.img)}" alt="${escapeAttr(p.name)}" onerror="this.style.opacity=.3"/>
+      <div class="compare-col-body">
+        <div class="compare-col-title">${escapeHtml(p.name)}</div>
+        <div class="compare-row"><span class="lbl">Store</span><span class="val">${escapeHtml(p.store)}</span></div>
+        <div class="compare-row"><span class="lbl">Price</span><span class="val">€${p.price.toFixed(2)}</span></div>
+        <div class="compare-row"><span class="lbl">Delivery${p.delivery_estimated?' (est.)':''}</span><span class="val">€${p.delivery.toFixed(2)}</span></div>
+        <div class="compare-row"><span class="lbl">Total</span><span class="val"><strong>€${p.total.toFixed(2)}</strong></span></div>
+        <div class="compare-row"><span class="lbl">Rating</span><span class="val">${p.rating?'⭐ '+p.rating:'—'}</span></div>
+        <div class="compare-row"><span class="lbl">Fit score</span><span class="val">${p.match}%</span></div>
+      </div>
+      <div class="compare-col-actions">
+        <button class="btn btn-add ${inB?'added':''}" onclick="addToBasket('${p.id}');openCompareModal();">${inB?'✓ '+basketMap[p.id].qty+' in basket':'+ basket'}</button>
+        <a class="btn btn-view" href="${escapeAttr(p.url)}" target="_blank" rel="noopener">↗ store</a>
+      </div>
     </div>`;
-  document.getElementById('compareModalBody').innerHTML = html;
+  }).join('')}</div>`;
+  document.getElementById('compareModalBody').innerHTML=html;
   document.getElementById('compareModal').classList.add('visible');
 }
-function closeCompare(){
-  document.getElementById('compareModal').classList.remove('visible');
+function closeCompare(){document.getElementById('compareModal').classList.remove('visible');}
+
+/* ============================================================
+   CHECKOUT
+   ============================================================ */
+function openCheckoutModal(){
+  if(Object.keys(basketMap).length===0)return;
+  const groups={};
+  Object.values(basketMap).forEach(({product:p,qty})=>{
+    if(!groups[p.store])groups[p.store]={items:[],delivery:p.delivery,vatRisk:p.vat_risk};
+    groups[p.store].items.push({...p,qty});
+  });
+  // Default: everything ticked — both store-level and item-level
+  checkoutSelections={};
+  Object.entries(groups).forEach(([store,g])=>{
+    checkoutSelections[store]=true;
+    g.items.forEach(p=>checkoutSelections[p.id]=true);
+  });
+  document.getElementById('checkoutModalTitle').textContent='Review & checkout';
+  renderCheckoutReview(groups);
+  document.getElementById('checkoutModal').classList.add('visible');
+}
+function closeCheckoutModal(){document.getElementById('checkoutModal').classList.remove('visible');}
+function renderCheckoutReview(groups){
+  const body=document.getElementById('checkoutModalBody');
+  const storeHtml=Object.entries(groups).map(([store,g])=>{
+    const ticked=checkoutSelections[store]!==false;
+    const storeTotal=g.items.reduce((t,i)=>t+i.price*i.qty,0)+g.delivery;
+    const vatNote=g.vatRisk?`<span class="vat-flag" title="May incur import VAT">⚠ VAT risk</span>`:'';
+    const itemsHtml=g.items.map(p=>{
+      const itemTicked=checkoutSelections[p.id]!==false;
+      const sk2=p.id.replace(/\W/g,'_');
+      return `
+      <div class="co-item" id="coitem-${sk2}" style="${itemTicked?'':'opacity:.4'}">
+        <div class="co-toggle ${itemTicked?'checked':''}" id="cotog-item-${sk2}"
+             onclick="toggleItemSelection('${p.id}','${store}')" style="width:14px;height:14px;font-size:9px;flex-shrink:0">
+          ${itemTicked?'✓':''}
+        </div>
+        <img class="co-item-img" src="${escapeAttr(p.img)}" alt="" onerror="this.style.opacity=.3"/>
+        <span class="co-item-name">${escapeHtml(p.name)}</span>
+        <span class="co-item-qty">×${p.qty}</span>
+        <span class="co-item-price">€${(p.price*p.qty).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    const sk=store.replace(/\W/g,'_');
+    return `<div class="co-store ${ticked?'':'skipped'}" id="costore-${sk}">
+      <div class="co-store-head">
+        <div class="co-toggle ${ticked?'checked':''}" id="cotog-${sk}" onclick="toggleStoreSelection('${store}','${sk}')">${ticked?'✓':''}</div>
+        <span class="co-store-name">${escapeHtml(store)} ${vatNote}</span>
+        <span class="co-store-subtotal ${ticked?'':'dimmed'}" id="cosub-${sk}">€${storeTotal.toFixed(2)}</span>
+      </div>
+      ${itemsHtml}
+      <div class="co-delivery">Delivery: ${g.delivery>0?`€${g.delivery.toFixed(2)} est.`:'Free'}</div>
+    </div>`;
+  }).join('');
+  body.innerHTML=`<div style="overflow-y:auto;flex:1">${storeHtml}</div>
+    <div class="co-footer">
+      <div class="co-summary" id="coSummary"></div>
+      <button class="co-place-btn" id="coPlaceBtn" onclick="placeOrders()">Place orders</button>
+    </div>`;
+  updateCheckoutSummary(groups);
+}
+function toggleItemSelection(productId,store){
+  checkoutSelections[productId]=!(checkoutSelections[productId]!==false);
+  const ticked=checkoutSelections[productId];
+  const sk2=productId.replace(/\W/g,'_');
+  const togEl=document.getElementById('cotog-item-'+sk2);
+  const itemEl=document.getElementById('coitem-'+sk2);
+  if(togEl){togEl.className='co-toggle'+(ticked?' checked':'');togEl.textContent=ticked?'✓':'';}
+  if(itemEl)itemEl.style.opacity=ticked?'1':'0.4';
+  // Re-sync store-level toggle: checked if any item in store is ticked
+  const groups={};
+  Object.values(basketMap).forEach(({product:p,qty})=>{
+    if(!groups[p.store])groups[p.store]={items:[],delivery:p.delivery,vatRisk:p.vat_risk};
+    groups[p.store].items.push({...p,qty});
+  });
+  const storeItems=groups[store]?.items||[];
+  const anyTicked=storeItems.some(p=>checkoutSelections[p.id]!==false);
+  const sk=store.replace(/\W/g,'_');
+  checkoutSelections[store]=anyTicked;
+  const stogEl=document.getElementById('cotog-'+sk);
+  const sstoreEl=document.getElementById('costore-'+sk);
+  const ssubEl=document.getElementById('cosub-'+sk);
+  if(stogEl){stogEl.className='co-toggle'+(anyTicked?' checked':'');stogEl.textContent=anyTicked?'✓':'';}
+  if(sstoreEl)sstoreEl.className='co-store'+(anyTicked?'':' skipped');
+  if(ssubEl)ssubEl.className='co-store-subtotal'+(anyTicked?'':' dimmed');
+  updateCheckoutSummary(groups);
+}
+function toggleStoreSelection(store,sk){
+  checkoutSelections[store]=!checkoutSelections[store];
+  const ticked=checkoutSelections[store];
+  // propagate to all items in store
+  const groups={};
+  Object.values(basketMap).forEach(({product:p,qty})=>{
+    if(!groups[p.store])groups[p.store]={items:[],delivery:p.delivery,vatRisk:p.vat_risk};
+    groups[p.store].items.push({...p,qty});
+  });
+  (groups[store]?.items||[]).forEach(p=>{
+    checkoutSelections[p.id]=ticked;
+    const sk2=p.id.replace(/\W/g,'_');
+    const togEl=document.getElementById('cotog-item-'+sk2);
+    const itemEl=document.getElementById('coitem-'+sk2);
+    if(togEl){togEl.className='co-toggle'+(ticked?' checked':'');togEl.textContent=ticked?'✓':'';}
+    if(itemEl)itemEl.style.opacity=ticked?'1':'0.4';
+  });
+  document.getElementById('cotog-'+sk).className='co-toggle'+(ticked?' checked':'');
+  document.getElementById('cotog-'+sk).textContent=ticked?'✓':'';
+  document.getElementById('costore-'+sk).className='co-store'+(ticked?'':' skipped');
+  const subEl=document.getElementById('cosub-'+sk);
+  if(subEl)subEl.className='co-store-subtotal'+(ticked?'':' dimmed');
+  updateCheckoutSummary(groups);
+}
+function updateCheckoutSummary(groups){
+  let subtotal=0,delivery=0,storeCount=0;
+  Object.entries(groups).forEach(([store,g])=>{
+    let storeHasItem=false;
+    g.items.forEach(i=>{
+      if(checkoutSelections[i.id]!==false){
+        subtotal+=i.price*i.qty;
+        storeHasItem=true;
+      }
+    });
+    if(storeHasItem){delivery+=g.delivery;storeCount++;}
+  });
+  const total=subtotal+delivery;
+  const summaryEl=document.getElementById('coSummary');
+  if(summaryEl)summaryEl.innerHTML=`
+    <div class="co-sum-line"><span>Subtotal</span><span>€${subtotal.toFixed(2)}</span></div>
+    <div class="co-sum-line"><span>Delivery (${storeCount} store${storeCount!==1?'s':''}, est.)</span><span>€${delivery.toFixed(2)}</span></div>
+    <div class="co-sum-line total"><span>Total</span><span>€${total.toFixed(2)}</span></div>`;
+  const btn=document.getElementById('coPlaceBtn');
+  if(btn){
+    if(storeCount===0){btn.disabled=true;btn.textContent='Select at least one item';}
+    else{btn.disabled=false;btn.textContent=`Place ${storeCount} order${storeCount!==1?'s':''} — €${total.toFixed(2)}`;}
+  }
+}
+function placeOrders(){
+  const groups={};
+  Object.values(basketMap).forEach(({product:p,qty})=>{
+    if(!groups[p.store])groups[p.store]={items:[],delivery:p.delivery,vatRisk:p.vat_risk};
+    groups[p.store].items.push({...p,qty});
+  });
+  const selectedStores=Object.entries(groups).map(([store,g])=>{
+    const tickedItems=g.items.filter(p=>checkoutSelections[p.id]!==false);
+    if(!tickedItems.length)return null;
+    return [store,{...g,items:tickedItems}];
+  }).filter(Boolean);
+  if(!selectedStores.length)return;
+  document.getElementById('checkoutModalTitle').textContent='Placing your orders...';
+  const statusHtml=selectedStores.map(([store],i)=>`
+    <div class="co-status-row" id="cosr-${i}">
+      <div class="co-dot" id="cod-${i}"></div>
+      <div class="co-status-label">
+        <div>${escapeHtml(store)}</div>
+        <div class="co-status-sub" id="cosub2-${i}">Waiting...</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('checkoutModalBody').innerHTML=`
+    <div class="co-status-list">${statusHtml}</div>
+    <div id="coDoneBanner" style="display:none" class="co-done-banner"></div>
+    <div class="co-footer">
+      <button class="co-place-btn" id="coDoneBtn" style="display:none" onclick="finishCheckout()">Done — back to shopping</button>
+    </div>`;
+  selectedStores.forEach(([store,g],i)=>{
+    setTimeout(()=>{
+      document.getElementById('cod-'+i).className='co-dot spinning';
+      document.getElementById('cosub2-'+i).textContent='Submitting to '+store+'...';
+      setTimeout(()=>{
+        document.getElementById('cod-'+i).className='co-dot done';
+        const ref=store.slice(0,3).toUpperCase()+'-'+Math.floor(Math.random()*9000000+1000000);
+        document.getElementById('cosub2-'+i).textContent='Order '+ref+' confirmed ✓';
+        if(i===selectedStores.length-1)setTimeout(()=>showOrderSuccess(selectedStores),400);
+      },1400);
+    },i*1800);
+  });
+}
+function showOrderSuccess(selectedStores){
+  document.getElementById('checkoutModalTitle').textContent='Orders placed!';
+  const totalCharged=selectedStores.reduce((t,[,g])=>t+g.items.reduce((s,i)=>s+i.price*i.qty,0)+g.delivery,0);
+  const today=new Date();
+  selectedStores.forEach(([store,g])=>{
+    const eta=new Date(today);
+    eta.setDate(today.getDate()+Math.floor(Math.random()*5)+3);
+    const etaStr=eta.toLocaleDateString('en-NL',{weekday:'long',day:'numeric',month:'long'});
+    const ref=store.slice(0,3).toUpperCase()+'-'+Math.floor(Math.random()*9000000+1000000);
+    orderHistory.push({
+      store,ref,status:'Order placed',eta:etaStr,
+      placedAt:today.toISOString(),
+      total:g.items.reduce((s,i)=>s+i.price*i.qty,0)+g.delivery,
+      items:g.items.map(p=>({name:p.name,img:p.img,qty:p.qty,price:p.price}))
+    });
+  });
+  saveState();
+  renderSidebarOrders();
+  const banner=document.getElementById('coDoneBanner');
+  banner.style.display='block';
+  banner.innerHTML=`✅ <strong>${selectedStores.length} order${selectedStores.length!==1?'s':''} placed!</strong><br>
+    Total: <strong>€${totalCharged.toFixed(2)}</strong> — track deliveries via
+    <span style="color:var(--accent-tx);cursor:pointer;text-decoration:underline"
+          onclick="closeCheckoutModal();openOrdersModal()">📦 My orders</span> in the sidebar.`;
+  document.getElementById('coDoneBtn').style.display='block';
+  const c=chats.find(x=>x.id===activeChat);
+  if(c){
+    c.messages.push({role:'ai',text:`✅ All done! Placed ${selectedStores.length} order${selectedStores.length!==1?'s':''} across ${selectedStores.map(([s])=>s).join(', ')}. Total: €${totalCharged.toFixed(2)}. Track deliveries via 📦 My orders in the left panel. Enjoy! 🎉`});
+    renderThread();saveState();
+  }
+}
+function finishCheckout(){
+  // Remove only items that were ticked/ordered
+  Object.keys(basketMap).forEach(id=>{
+    if(checkoutSelections[id]!==false)delete basketMap[id];
+  });
+  // Refresh card qty controls so thread cards reflect removed items
+  Object.keys(resultsCache).forEach(id=>updateCardControls(id));
+  closeCheckoutModal();renderBasket();saveState();
 }
 
-/* ---------- Utility ---------- */
-function escapeHtml(s){
-  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* ============================================================
+   SETTINGS
+   ============================================================ */
+function openSettings(){
+  document.getElementById('sf-username').value=userProfile.username||'';
+  document.getElementById('sf-email').value=userProfile.email||'';
+  document.getElementById('sf-phone').value=userProfile.phone||'';
+  document.getElementById('sf-country').value=userProfile.country||shipTo||'NL';
+  document.getElementById('sf-address').value=userProfile.address||'';
+  document.getElementById('sf-city').value=userProfile.city||'';
+  document.getElementById('sf-postal').value=userProfile.postal||'';
+  document.getElementById('sf-cardname').value=userProfile.cardname||'';
+  document.getElementById('sf-cardnum').value=userProfile.cardnum||'';
+  document.getElementById('sf-expiry').value=userProfile.expiry||'';
+  document.getElementById('settingsAvatarName').textContent=userProfile.username||'Kaysiia T.';
+  document.getElementById('settingsAvatarEmail').textContent=userProfile.email||'';
+  switchSettingsTab('profile');
+  document.getElementById('settingsModal').classList.add('visible');
 }
-function escapeAttr(s){
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function closeSettings(){document.getElementById('settingsModal').classList.remove('visible');}
+function switchSettingsTab(tab){
+  ['profile','billing'].forEach(t=>{
+    document.getElementById('spanel-'+t).style.display=t===tab?'block':'none';
+    document.getElementById('stab-'+t).className='stab'+(t===tab?' active':'');
+  });
 }
+function saveProfile(){
+  const newName=document.getElementById('sf-username').value.trim()||'You';
+  userProfile.username=newName;
+  userProfile.email=document.getElementById('sf-email').value.trim();
+  userProfile.phone=document.getElementById('sf-phone').value.trim();
+  userProfile.country=document.getElementById('sf-country').value;
+  userProfile.address=document.getElementById('sf-address').value.trim();
+  userProfile.city=document.getElementById('sf-city').value.trim();
+  userProfile.postal=document.getElementById('sf-postal').value.trim();
+  shipTo=userProfile.country;  // update ship-to used by searches
+  document.getElementById('sidebarUsername').textContent=newName;
+  document.getElementById('settingsAvatarName').textContent=newName;
+  document.getElementById('settingsAvatarEmail').textContent=userProfile.email;
+  saveState();
+  const msg=document.getElementById('profileSavedMsg');
+  msg.textContent='✓ Saved!';
+  setTimeout(()=>msg.textContent='',2500);
+}
+function saveBilling(){
+  userProfile.cardname=document.getElementById('sf-cardname').value.trim();
+  userProfile.cardnum=document.getElementById('sf-cardnum').value.trim();
+  userProfile.expiry=document.getElementById('sf-expiry').value.trim();
+  saveState();
+  const msg=document.getElementById('billingSavedMsg');
+  msg.textContent='✓ Billing info saved!';
+  setTimeout(()=>msg.textContent='',2500);
+}
+function fmtCard(el){let v=el.value.replace(/\D/g,'').slice(0,16);el.value=v.match(/.{1,4}/g)?.join(' ')||v;}
+function fmtExpiry(el){let v=el.value.replace(/\D/g,'').slice(0,4);if(v.length>=3)v=v.slice(0,2)+' / '+v.slice(2);el.value=v;}
 
-/* ---------- Bootstrap ---------- */
-loadState();  // also restores shipTo if present
-document.getElementById('shipToSelect').value = shipTo;
+/* ============================================================
+   UTILITY
+   ============================================================ */
+function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function escapeAttr(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
-if(chats.length > 0){
-  if(!activeChat || !chats.find(c => c.id === activeChat)) activeChat = chats[0].id;
-  const c = chats.find(x => x.id === activeChat);
-  document.getElementById('chatTitle').textContent = c ? c.title : 'New search';
-  document.getElementById('chips').style.display = (c && c.messages.length) ? 'none' : 'flex';
-  renderHistory(); renderThread(); renderBasket(); renderCompareBar();
-} else {
-  newChat();
-  renderBasket();
+/* ============================================================
+   BOOTSTRAP
+   ============================================================ */
+loadState();
+// Restore shipTo from saved profile if present
+if(userProfile.country)shipTo=userProfile.country;
+document.getElementById('sidebarUsername').textContent=userProfile.username||'Kaysiia T.';
+
+if(chats.length>0){
+  if(!activeChat||!chats.find(c=>c.id===activeChat))activeChat=chats[0].id;
+  const c=chats.find(x=>x.id===activeChat);
+  document.getElementById('chatTitle').textContent=c?c.title:'New search';
+  document.getElementById('chips').style.display=(c&&c.messages.length)?'none':'flex';
+  renderHistory();renderThread();renderBasket();renderCompareBar();
+}else{
+  newChat();renderBasket();
 }
+renderSidebarOrders();
 </script>
 </body>
 </html>
